@@ -244,7 +244,7 @@ export function WorkspaceCanvas({
                   onAttemptConnectToNode(node.id);
                 }
               }}
-              className={`${nodeSignalClass(firstSignal)} absolute relative w-[164px] border p-3 text-left transition hover:border-accent ${
+              className={`${nodeSignalClass(firstSignal)} absolute w-[164px] border p-3 text-left transition hover:border-accent ${
                 selected ? 'ring-2 ring-accent' : ''
               } ${isTargetable ? 'border-dashed border-signalHot' : ''}`}
               style={{ left: node.position.x, top: node.position.y, height: `${NODE_HEIGHT}px`, ...customStyle }}
