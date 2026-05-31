@@ -1,0 +1,23 @@
+{
+  "name": "vfcs-workspace",
+  "version": "0.1.0",
+  "private": true,
+  "description": "VulpFin CircuitSmith monorepo by TG11",
+  "packageManager": "pnpm@8.15.9",
+  "scripts": {
+    "dev": "corepack pnpm --filter @vfcs/web dev",
+    "build": "corepack pnpm -r build",
+    "test": "corepack pnpm -r test",
+    "lint": "corepack pnpm -r lint",
+    "format": "prettier --write ."
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.30",
+    "@typescript-eslint/eslint-plugin": "^8.33.0",
+    "@typescript-eslint/parser": "^8.33.0",
+    "eslint": "^8.57.1",
+    "eslint-config-prettier": "^10.1.5",
+    "prettier": "^3.5.3",
+    "typescript": "^5.8.3"
+  }
+}

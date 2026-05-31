@@ -1,0 +1,38 @@
+interface StatusPanelProps {
+  tick: number;
+  running: boolean;
+  ledSignal: string;
+  statusMessage: string;
+  exportPreview: string;
+}
+
+export function StatusPanel({ tick, running, ledSignal, statusMessage, exportPreview }: StatusPanelProps) {
+  return (
+    <section className="rounded-xl border border-panelBorder bg-panel/80 p-4 shadow-panelGlow backdrop-blur-sm">
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-[0.2em] text-accent">Simulation and Status</h2>
+      <div className="grid gap-3 md:grid-cols-4">
+        <div className="rounded-lg border border-panelBorder/70 bg-[#031a30] p-3 text-sm">
+          <div className="text-xs uppercase tracking-[0.15em] text-accentSoft">Tick</div>
+          <div className="text-lg font-semibold">{tick}</div>
+        </div>
+        <div className="rounded-lg border border-panelBorder/70 bg-[#031a30] p-3 text-sm">
+          <div className="text-xs uppercase tracking-[0.15em] text-accentSoft">Run State</div>
+          <div className="text-lg font-semibold">{running ? 'Running' : 'Paused'}</div>
+        </div>
+        <div className="rounded-lg border border-panelBorder/70 bg-[#031a30] p-3 text-sm">
+          <div className="text-xs uppercase tracking-[0.15em] text-accentSoft">LED Output</div>
+          <div className="text-lg font-semibold text-signalHot">{ledSignal}</div>
+        </div>
+        <div className="rounded-lg border border-panelBorder/70 bg-[#031a30] p-3 text-sm">
+          <div className="text-xs uppercase tracking-[0.15em] text-accentSoft">Last Action</div>
+          <div className="text-sm">{statusMessage}</div>
+        </div>
+      </div>
+
+      <div className="mt-3 rounded-lg border border-panelBorder/70 bg-[#020f1e] p-3">
+        <div className="mb-2 text-xs uppercase tracking-[0.15em] text-accentSoft">Export Preview</div>
+        <pre className="max-h-40 overflow-auto whitespace-pre-wrap text-xs text-slate-200">{exportPreview}</pre>
+      </div>
+    </section>
+  );
+}

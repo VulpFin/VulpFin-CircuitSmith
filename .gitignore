@@ -1,2 +1,8 @@
+node_modules
+dist
+coverage
+.vscode
+.DS_Store
+*.log
 *.code-workspace
 initial.md
