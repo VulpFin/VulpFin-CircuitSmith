@@ -29,6 +29,8 @@ interface DragState {
   nodeId: string;
   offsetX: number;
   offsetY: number;
+  startX: number;
+  startY: number;
 }
 
 const NODE_WIDTH = 164;
@@ -101,6 +103,7 @@ export function WorkspaceCanvas({
 }: WorkspaceCanvasProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [dragState, setDragState] = useState<DragState | null>(null);
+  const [hasDragged, setHasDragged] = useState(false);
 
   useEffect(() => {
     if (!dragState) {
@@ -116,6 +119,11 @@ export function WorkspaceCanvas({
       const rect = container.getBoundingClientRect();
       const nextX = clamp(event.clientX - rect.left - dragState.offsetX, 0, Math.max(0, rect.width - NODE_WIDTH));
       const nextY = clamp(event.clientY - rect.top - dragState.offsetY, 0, Math.max(0, rect.height - NODE_HEIGHT));
+      const distance =
+        Math.abs(event.clientX - dragState.startX) + Math.abs(event.clientY - dragState.startY);
+      if (distance > 4) {
+        setHasDragged(true);
+      }
 
       onMoveNode(dragState.nodeId, {
         x: Math.round(nextX),
@@ -125,6 +133,7 @@ export function WorkspaceCanvas({
 
     const handleMouseUp = () => {
       setDragState(null);
+      window.setTimeout(() => setHasDragged(false), 0);
     };
 
     window.addEventListener('mousemove', handleMouseMove);
@@ -212,10 +221,13 @@ export function WorkspaceCanvas({
                   return;
                 }
                 const rect = event.currentTarget.getBoundingClientRect();
+                setHasDragged(false);
                 setDragState({
                   nodeId: node.id,
                   offsetX: event.clientX - rect.left,
                   offsetY: event.clientY - rect.top,
+                  startX: event.clientX,
+                  startY: event.clientY,
                 });
               }}
               onDoubleClick={() => {
@@ -224,6 +236,9 @@ export function WorkspaceCanvas({
                 }
               }}
               onClick={() => {
+                if (hasDragged) {
+                  return;
+                }
                 onSelectNode(node.id);
                 if (isTargetable) {
                   onAttemptConnectToNode(node.id);
@@ -262,8 +277,8 @@ export function WorkspaceCanvas({
                 <div className="mt-1 text-xs text-slate-300">Signal: {firstSignal}</div>
               ) : null}
 
-              {node.nodeType === 'CHIP' ? (
-                <div className="absolute inset-0">
+              {node.nodeType === 'CHIP' && selected ? (
+                <div className="pointer-events-none absolute inset-0">
                   {Object.entries(chipPinLayout).map(([pinId, point]) => (
                     <div
                       key={`${node.id}-${pinId}`}

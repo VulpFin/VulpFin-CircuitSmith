@@ -151,12 +151,13 @@ export function ChipLibraryPanel({
             {chipPinDrafts.map((draft) => (
               <div
                 key={draft.draftId}
-                className="grid grid-cols-[auto_1fr_1fr_auto_auto] items-center gap-2 rounded border border-panelBorder/60 p-2"
+                className="grid gap-2 rounded border border-panelBorder/60 p-2 sm:grid-cols-[auto_1fr_1fr_auto_auto] sm:items-center"
               >
                 <input
                   type="checkbox"
                   checked={draft.enabled}
                   onChange={(event) => onChipPinDraftChange(draft.draftId, { enabled: event.target.checked })}
+                  className="justify-self-start"
                 />
                 <input
                   value={draft.id}
@@ -186,11 +187,11 @@ export function ChipLibraryPanel({
                 <button
                   type="button"
                   onClick={() => onRemoveChipPinDraft(draft.draftId)}
-                  className="rounded border border-[#6e2e2e] bg-[#301111] px-2 py-1 text-[10px] uppercase tracking-[0.1em] text-[#ffb5b5]"
+                  className="rounded border border-[#6e2e2e] bg-[#301111] px-2 py-1 text-[10px] uppercase tracking-[0.1em] text-[#ffb5b5] sm:justify-self-end"
                 >
                   X
                 </button>
-                <div className="col-span-5 flex items-center justify-between text-[10px] uppercase tracking-[0.12em] text-slate-400">
+                <div className="flex flex-wrap items-center justify-between gap-1 text-[10px] uppercase tracking-[0.12em] text-slate-400 sm:col-span-5">
                   <span>{draft.sourceNodeId ? `Source: ${draft.sourceNodeId}` : 'Custom pin'}</span>
                   <span>
                     Pos: {Math.round(clampPercent(draft.pinX ?? 50))}, {Math.round(clampPercent(draft.pinY ?? 50))}
