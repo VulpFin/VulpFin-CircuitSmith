@@ -23,7 +23,7 @@ export const DEFAULT_NODE_LIBRARY: Record<string, NodeDefinition> = {
     category: 'clock',
     inputPins: [],
     outputPins: [{ id: 'OUT', name: 'Out', direction: 'output' }],
-    defaultParameters: { period: 2 },
+    defaultParameters: { frequencyHz: 1 },
     defaultState: { value: '0' },
   },
   NOT: {
@@ -117,6 +117,14 @@ export const DEFAULT_NODE_LIBRARY: Record<string, NodeDefinition> = {
     ],
     outputPins: [{ id: 'Q', name: 'Q', direction: 'output' }],
     defaultState: { q: '0', prevClk: '0' },
+  },
+  CHIP: {
+    type: 'CHIP',
+    label: 'Custom Chip',
+    category: 'chip',
+    inputPins: [],
+    outputPins: [],
+    defaultState: {},
   },
 };
 

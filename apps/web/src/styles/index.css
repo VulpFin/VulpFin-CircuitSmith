@@ -38,3 +38,30 @@ body {
 .signal-off {
   border-color: #1d91b2;
 }
+
+.signal-err {
+  border-color: #ff5757;
+  box-shadow: 0 0 0 1px rgba(255, 87, 87, 0.35), 0 0 12px rgba(255, 87, 87, 0.35);
+}
+
+.signal-unknown {
+  border-color: #6c7f95;
+}
+
+.led-indicator {
+  display: inline-block;
+  width: 0.8rem;
+  height: 0.8rem;
+  border-radius: 9999px;
+  border: 1px solid rgba(16, 20, 24, 0.7);
+}
+
+.led-on {
+  background: radial-gradient(circle at 35% 35%, #ffd29f 0%, #ff9f43 55%, #b95907 100%);
+  box-shadow: 0 0 8px rgba(255, 159, 67, 0.65), 0 0 16px rgba(255, 159, 67, 0.45);
+}
+
+.led-off {
+  background: radial-gradient(circle at 35% 35%, #2f3a44 0%, #1b2228 65%, #11161a 100%);
+  box-shadow: inset 0 0 3px rgba(0, 0, 0, 0.45);
+}

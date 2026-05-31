@@ -1,6 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
-import { DEFAULT_NODE_LIBRARY } from '@vfcs/sim-core';
-import type { CircuitDefinition, LogicValue, Position } from '@vfcs/circuit-model';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import type { ChipDefinition, CircuitDefinition, LogicValue, Position } from '@vfcs/circuit-model';
+import {
+  nodeSymbol,
+  resolveChipAppearance,
+  resolveChipPinLayout,
+  resolveNodePins,
+} from '../lib/nodePins.js';
 
 interface PendingWireSource {
   nodeId: string;
@@ -10,11 +15,14 @@ interface PendingWireSource {
 interface WorkspaceCanvasProps {
   circuit: CircuitDefinition;
   nodeOutputs: Record<string, Record<string, LogicValue>>;
+  nodeStates: Record<string, Record<string, unknown>>;
   selectedNodeId: string | null;
   pendingWireSource: PendingWireSource | null;
+  chipLibrary: ChipDefinition[];
   onSelectNode: (nodeId: string) => void;
   onMoveNode: (nodeId: string, position: Position) => void;
   onAttemptConnectToNode: (targetNodeId: string) => void;
+  onToggleInputNode: (nodeId: string) => void;
 }
 
 interface DragState {
@@ -23,14 +31,20 @@ interface DragState {
   offsetY: number;
 }
 
-const NODE_WIDTH = 144;
-const NODE_HEIGHT = 88;
+const NODE_WIDTH = 164;
+const NODE_HEIGHT = 100;
 
 function nodeSignalClass(signal: LogicValue | undefined): string {
   if (signal === '1') {
     return 'signal-on';
   }
-  return 'signal-off';
+  if (signal === '0') {
+    return 'signal-off';
+  }
+  if (signal === 'ERR') {
+    return 'signal-err';
+  }
+  return 'signal-unknown';
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -51,14 +65,39 @@ function targetAnchor(position: Position): Position {
   };
 }
 
+function outputSignalForNode(
+  nodeId: string,
+  outputPinIds: string[],
+  nodeType: string,
+  nodeOutputs: Record<string, Record<string, LogicValue>>,
+  nodeStates: Record<string, Record<string, unknown>>,
+): LogicValue {
+  if (nodeType === 'OUTPUT') {
+    const stateValue = nodeStates[nodeId]?.value as LogicValue | undefined;
+    return stateValue ?? 'X';
+  }
+
+  for (const pinId of outputPinIds) {
+    const value = nodeOutputs[nodeId]?.[pinId];
+    if (value) {
+      return value;
+    }
+  }
+
+  return 'X';
+}
+
 export function WorkspaceCanvas({
   circuit,
   nodeOutputs,
+  nodeStates,
   selectedNodeId,
   pendingWireSource,
+  chipLibrary,
   onSelectNode,
   onMoveNode,
   onAttemptConnectToNode,
+  onToggleInputNode,
 }: WorkspaceCanvasProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [dragState, setDragState] = useState<DragState | null>(null);
@@ -103,10 +142,10 @@ export function WorkspaceCanvas({
     <section className="grid-canvas relative rounded-xl border border-panelBorder bg-[#020f1e] p-4 shadow-panelGlow">
       <h2 className="mb-3 text-sm font-semibold uppercase tracking-[0.2em] text-accent">Workspace</h2>
       <p className="mb-4 text-xs text-slate-300">
-        Drag nodes to reposition. Select a source pin in the inspector, then click a target node to create a wire.
+        Drag nodes to reposition. Double-click INPUT nodes to toggle. Use inspector pin controls to start wiring.
       </p>
 
-      <div ref={containerRef} className="relative min-h-[420px] overflow-hidden rounded-lg border border-panelBorder/60">
+      <div ref={containerRef} className="relative min-h-[440px] overflow-hidden rounded-lg border border-panelBorder/60">
         <svg className="pointer-events-none absolute inset-0 h-full w-full">
           {circuit.wires.map((wire) => {
             const sourceNode = nodeById.get(wire.from.nodeId);
@@ -132,13 +171,37 @@ export function WorkspaceCanvas({
         </svg>
 
         {circuit.nodes.map((node) => {
-          const outputPins = nodeOutputs[node.id] ?? {};
-          const firstSignal = Object.values(outputPins)[0] ?? 'X';
+          const pinInfo = resolveNodePins(node, chipLibrary);
+          const firstSignal = outputSignalForNode(
+            node.id,
+            pinInfo.outputPins.map((pin) => pin.id),
+            node.nodeType,
+            nodeOutputs,
+            nodeStates,
+          );
+
           const selected = selectedNodeId === node.id;
           const isTargetable =
             Boolean(pendingWireSource) &&
             pendingWireSource?.nodeId !== node.id &&
-            (DEFAULT_NODE_LIBRARY[node.nodeType]?.inputPins.length ?? 0) > 0;
+            pinInfo.inputPins.length > 0;
+
+          const symbol = nodeSymbol(node, chipLibrary);
+          const chipAppearance = resolveChipAppearance(node, chipLibrary);
+          const chipPinLayout = resolveChipPinLayout(node, chipLibrary);
+
+          const customStyle: CSSProperties = chipAppearance
+            ? {
+                backgroundColor: chipAppearance.bodyColor,
+                color: chipAppearance.textColor,
+                borderColor: chipAppearance.accentColor,
+                borderRadius: chipAppearance.shape === 'rounded' ? '1rem' : '0.5rem',
+                clipPath:
+                  chipAppearance.shape === 'seven-segment'
+                    ? 'polygon(8% 0%, 92% 0%, 100% 12%, 100% 88%, 92% 100%, 8% 100%, 0% 88%, 0% 12%)'
+                    : undefined,
+              }
+            : {};
 
           return (
             <button
@@ -155,20 +218,67 @@ export function WorkspaceCanvas({
                   offsetY: event.clientY - rect.top,
                 });
               }}
+              onDoubleClick={() => {
+                if (node.nodeType === 'INPUT') {
+                  onToggleInputNode(node.id);
+                }
+              }}
               onClick={() => {
                 onSelectNode(node.id);
                 if (isTargetable) {
                   onAttemptConnectToNode(node.id);
                 }
               }}
-              className={`${nodeSignalClass(firstSignal)} absolute w-36 rounded-lg border bg-[#031a30]/90 p-3 text-left transition hover:border-accent ${
+              className={`${nodeSignalClass(firstSignal)} absolute relative w-[164px] border p-3 text-left transition hover:border-accent ${
                 selected ? 'ring-2 ring-accent' : ''
               } ${isTargetable ? 'border-dashed border-signalHot' : ''}`}
-              style={{ left: node.position.x, top: node.position.y, height: `${NODE_HEIGHT}px` }}
+              style={{ left: node.position.x, top: node.position.y, height: `${NODE_HEIGHT}px`, ...customStyle }}
+              title={node.nodeType === 'INPUT' ? 'Double-click to toggle value' : undefined}
             >
-              <div className="text-[11px] uppercase tracking-[0.15em] text-accentSoft">{node.nodeType}</div>
-              <div className="font-semibold text-slate-100">{node.label ?? node.id}</div>
-              <div className="mt-1 text-xs text-slate-300">Signal: {firstSignal}</div>
+              <div className="flex items-start justify-between gap-2">
+                <div className="text-[11px] uppercase tracking-[0.15em] text-accentSoft">{node.nodeType}</div>
+                <span className="rounded border border-panelBorder/80 px-1 py-[1px] text-[10px] uppercase tracking-[0.15em] text-accentSoft">
+                  {symbol}
+                </span>
+              </div>
+              <div className="font-semibold text-slate-100" style={{ color: chipAppearance?.textColor ?? undefined }}>
+                {node.label ?? node.id}
+              </div>
+
+              {node.nodeType === 'OUTPUT' ? (
+                <div className="mt-2 flex items-center gap-2 text-xs text-slate-300">
+                  <span className={`led-indicator ${firstSignal === '1' ? 'led-on' : 'led-off'}`} />
+                  LED: {firstSignal}
+                </div>
+              ) : null}
+
+              {node.nodeType === 'CLOCK' ? (
+                <div className="mt-2 text-xs text-slate-300">
+                  Freq: {Number(node.parameters?.frequencyHz ?? 1).toLocaleString()} Hz
+                </div>
+              ) : null}
+
+              {node.nodeType !== 'OUTPUT' && node.nodeType !== 'CLOCK' ? (
+                <div className="mt-1 text-xs text-slate-300">Signal: {firstSignal}</div>
+              ) : null}
+
+              {node.nodeType === 'CHIP' ? (
+                <div className="absolute inset-0">
+                  {Object.entries(chipPinLayout).map(([pinId, point]) => (
+                    <div
+                      key={`${node.id}-${pinId}`}
+                      className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full border border-black/60 bg-[#7bd0ff] px-[3px] py-[1px] text-[8px] leading-none text-black"
+                      style={{
+                        left: `${point.x}%`,
+                        top: `${point.y}%`,
+                      }}
+                      title={pinId}
+                    >
+                      {pinId.slice(0, 3)}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </button>
           );
         })}

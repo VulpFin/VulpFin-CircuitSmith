@@ -205,8 +205,11 @@ export class SimulationEngine {
       }
 
       if (node.nodeType === 'CLOCK') {
-        const period = this.nodeParameterAsNumber(node, 'period', 2);
-        const phase = Math.floor(this.tick / Math.max(period, 1)) % 2;
+        const legacyPeriod = this.nodeParameterAsNumber(node, 'period', -1);
+        const frequencyHz = this.nodeParameterAsNumber(node, 'frequencyHz', 1);
+        const halfCycleTicks =
+          legacyPeriod > 0 ? Math.max(1, Math.round(legacyPeriod)) : this.frequencyToHalfCycleTicks(frequencyHz);
+        const phase = Math.floor(this.tick / halfCycleTicks) % 2;
         const nextValue: LogicValue = phase === 0 ? '0' : '1';
         this.outputs[node.id] = { OUT: nextValue };
       }
@@ -387,6 +390,20 @@ export class SimulationEngine {
     }
 
     return fallback;
+  }
+
+  private frequencyToHalfCycleTicks(frequencyHz: number): number {
+    const minHz = 1;
+    const maxHz = 10_000_000_000;
+    const clamped = Math.min(maxHz, Math.max(minHz, frequencyHz));
+    const normalized = (Math.log10(clamped) - Math.log10(minHz)) / (Math.log10(maxHz) - Math.log10(minHz));
+
+    const slowestHalfCycleTicks = 200;
+    const fastestHalfCycleTicks = 1;
+    const mapped =
+      slowestHalfCycleTicks - normalized * (slowestHalfCycleTicks - fastestHalfCycleTicks);
+
+    return Math.max(fastestHalfCycleTicks, Math.round(mapped));
   }
 
   private requireNode(nodeId: string): NodeInstance {

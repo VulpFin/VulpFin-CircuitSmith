@@ -175,4 +175,35 @@ describe('SimulationEngine', () => {
     expect(conflictErrors.length).toBeGreaterThan(0);
     expect(outputValue(snapshot, 'out')).toBe('ERR');
   });
+
+  it('supports configurable clock frequency parameter mapping', () => {
+    const circuit: CircuitDefinition = {
+      id: 'clock-param-demo',
+      name: 'Clock Param Demo',
+      nodes: [
+        {
+          id: 'clk_fast',
+          nodeType: 'CLOCK',
+          parameters: { frequencyHz: 10_000_000_000 },
+          position: { x: 0, y: 0 },
+        },
+        { id: 'led_fast', nodeType: 'OUTPUT', position: { x: 140, y: 0 } },
+      ],
+      wires: [{ id: 'w1', from: { nodeId: 'clk_fast', pinId: 'OUT' }, to: { nodeId: 'led_fast', pinId: 'IN' } }],
+      nets: [
+        {
+          id: 'net_1',
+          wireIds: ['w1'],
+          driverPins: [{ nodeId: 'clk_fast', pinId: 'OUT' }],
+          loadPins: [{ nodeId: 'led_fast', pinId: 'IN' }],
+        },
+      ],
+    };
+
+    const engine = new SimulationEngine(circuit);
+    const first = engine.step();
+    const second = engine.step();
+
+    expect(outputValue(first, 'led_fast')).not.toBe(outputValue(second, 'led_fast'));
+  });
 });

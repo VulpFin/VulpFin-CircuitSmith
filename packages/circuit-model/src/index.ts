@@ -102,6 +102,14 @@ export interface ChipDefinition {
   metadata?: Record<string, unknown>;
 }
 
+export interface ChipAppearance {
+  shape: 'rect' | 'rounded' | 'seven-segment';
+  bodyColor: string;
+  accentColor: string;
+  textColor: string;
+  symbol: string;
+}
+
 export interface PhysicalPart {
   id: string;
   manufacturerPartNumber: string;
@@ -145,6 +153,7 @@ export interface MakeChipRequest {
   chipName: string;
   version?: string;
   publicPins: PinDefinition[];
+  metadata?: Record<string, unknown>;
 }
 
 export function createChipDefinitionFromCircuit(request: MakeChipRequest): ChipDefinition {
@@ -158,6 +167,7 @@ export function createChipDefinitionFromCircuit(request: MakeChipRequest): ChipD
       generatedBy: 'createChipDefinitionFromCircuit',
       generatedAt: new Date().toISOString(),
       status: 'placeholder-architecture',
+      ...(request.metadata ?? {}),
     },
   };
 }
