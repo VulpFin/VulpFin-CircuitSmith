@@ -15,12 +15,12 @@ VFCS is intentionally different: it is the bridge between these layers, not a re
 ## Current MVP Scope
 
 This repository currently provides a clean monorepo skeleton with:
-- a React + TypeScript + Vite frontend (`apps/web`) with a dark technical UI shell,
+- a React + TypeScript + Vite frontend (`apps/web`) with a dark technical UI and interactive canvas (add/move/delete/connect nodes),
 - a shared circuit and project data model (`packages/circuit-model`),
-- a TypeScript digital simulation engine (`packages/sim-core`) with combinational and sequential support,
+- a TypeScript digital simulation engine (`packages/sim-core`) with combinational and sequential support plus diagnostics,
 - exporters for `.ligic.json`, Verilog, and placeholder KiCad output (`packages/exporters`),
 - logical-to-physical mapping seed data for 74xx/4000 families (`packages/part-mapper`),
-- integration stubs for DigiKey, EasyEDA/LCSC, SnapEDA/SnapMagic, and KiCad symbol mapping (`packages/integrations`),
+- a local seeded DigiKey adapter and additional integration stubs for EasyEDA/LCSC, SnapEDA/SnapMagic, and KiCad symbol mapping (`packages/integrations`),
 - a seeded T flip-flop demo circuit and mapping notes.
 
 ## What Exists Today and Why VFCS Is Different
@@ -38,16 +38,18 @@ How VFCS differs:
 ## Architecture Snapshot
 
 - `apps/web`:
-  - UI shell with palette, workspace, inspector, status panel, simulator controls.
-  - "Make Chip" scaffolding and export actions.
+  - interactive palette/workspace/inspector/status layout.
+  - drag-to-move nodes, connect wires, delete nodes.
+  - local chip library workflow ("Make Chip" with localStorage persistence).
 - `packages/circuit-model`:
   - canonical interfaces/types (`LogicValue`, `NodeInstance`, `CircuitDefinition`, `PhysicalMapping`, etc.).
-  - centralized branding constants and `createChipDefinitionFromCircuit` architecture helper.
+  - centralized branding constants, schema metadata helpers, and editing helpers.
 - `packages/sim-core`:
   - logic value handling (`0`, `1`, `X`, `Z`, `ERR`),
-  - gate evaluation,
+  - deterministic gate evaluation,
   - step-based update loop,
   - DFF/TFF sequential state handling,
+  - diagnostics for floating inputs, conflicting drivers, and unstable combinational loops,
   - unit tests with Vitest.
 - `packages/exporters`:
   - Ligic JSON exporter,
@@ -89,38 +91,38 @@ The demo includes mapping examples for:
 ### Install dependencies
 
 ```bash
-pnpm install
+corepack pnpm install
 ```
 
 ### Run the web app
 
 ```bash
-pnpm dev
+corepack pnpm dev
 ```
 
 ### Run tests
 
 ```bash
-pnpm test
+corepack pnpm test
 ```
 
 ### Build workspace packages
 
 ```bash
-pnpm build
+corepack pnpm build
 ```
 
 ## Lint and Format
 
 ```bash
-pnpm lint
-pnpm format
+corepack pnpm lint
+corepack pnpm format
 ```
 
 ## Export Notes
 
 Current supported export path:
-- `.ligic.json` (native project/circuit serialization),
+- `.ligic.json` (versioned schema envelope + circuit/project payload),
 - `.v` (MVP Verilog generation for core gates and flip-flops).
 
 Planned:
@@ -128,8 +130,9 @@ Planned:
 
 ## Integration Notes
 
-The integration package contains API-compatible placeholders for:
-- DigiKey search,
+The integration package currently includes:
+- seeded local DigiKey-compatible search adapter (stable query/result contract),
+- and placeholders for:
 - EasyEDA/LCSC search,
 - SnapEDA/SnapMagic model lookup,
 - KiCad symbol/footprint mapping.
@@ -138,12 +141,12 @@ No external API calls are implemented yet.
 
 ## Roadmap (High Level)
 
-1. strengthen interactive editor graph operations (node add/delete/connect).
-2. add richer net resolution and deterministic scheduling.
-3. support virtual chip authoring UI and library management.
-4. improve Verilog coverage and formalize `.ligic.json` schema versions.
-5. connect integration adapters and part normalization.
-6. add schematic/netlist exporters.
+1. expand editor UX (multi-select, marquee, undo/redo, pin-level wiring controls).
+2. improve simulation scheduling toward event-queue execution and richer timing models.
+3. support chip instantiation directly from saved chip library entries.
+4. expand Verilog export (hierarchical modules, bus support, wider primitive coverage).
+5. connect live external APIs (DigiKey/EasyEDA/SnapEDA) with auth and normalization.
+6. add true KiCad schematic/netlist exporters.
 
 ## Licensing Notes
 

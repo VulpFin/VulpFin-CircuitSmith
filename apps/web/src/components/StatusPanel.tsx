@@ -1,12 +1,22 @@
+import type { SimulationDiagnostic } from '@vfcs/sim-core';
+
 interface StatusPanelProps {
   tick: number;
   running: boolean;
   ledSignal: string;
   statusMessage: string;
   exportPreview: string;
+  diagnostics: SimulationDiagnostic[];
 }
 
-export function StatusPanel({ tick, running, ledSignal, statusMessage, exportPreview }: StatusPanelProps) {
+export function StatusPanel({
+  tick,
+  running,
+  ledSignal,
+  statusMessage,
+  exportPreview,
+  diagnostics,
+}: StatusPanelProps) {
   return (
     <section className="rounded-xl border border-panelBorder bg-panel/80 p-4 shadow-panelGlow backdrop-blur-sm">
       <h2 className="mb-3 text-sm font-semibold uppercase tracking-[0.2em] text-accent">Simulation and Status</h2>
@@ -27,6 +37,24 @@ export function StatusPanel({ tick, running, ledSignal, statusMessage, exportPre
           <div className="text-xs uppercase tracking-[0.15em] text-accentSoft">Last Action</div>
           <div className="text-sm">{statusMessage}</div>
         </div>
+      </div>
+
+      <div className="mt-3 rounded-lg border border-panelBorder/70 bg-[#020f1e] p-3">
+        <div className="mb-2 text-xs uppercase tracking-[0.15em] text-accentSoft">Diagnostics</div>
+        {diagnostics.length === 0 ? (
+          <p className="text-xs text-slate-300">No diagnostics in current snapshot.</p>
+        ) : (
+          <ul className="space-y-1 text-xs text-slate-200">
+            {diagnostics.slice(0, 8).map((item, index) => (
+              <li key={`${item.code}-${index}`}>
+                <span className={item.severity === 'error' ? 'text-[#ffb5b5]' : 'text-[#ffd199]'}>
+                  [{item.severity.toUpperCase()}] {item.code}
+                </span>{' '}
+                {item.message}
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
       <div className="mt-3 rounded-lg border border-panelBorder/70 bg-[#020f1e] p-3">

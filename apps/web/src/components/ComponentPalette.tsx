@@ -2,17 +2,20 @@ import type { PaletteItem } from '../data/componentPalette.js';
 
 interface ComponentPaletteProps {
   items: PaletteItem[];
+  onAddComponent: (nodeType: string) => void;
 }
 
-export function ComponentPalette({ items }: ComponentPaletteProps) {
+export function ComponentPalette({ items, onAddComponent }: ComponentPaletteProps) {
   return (
     <aside className="rounded-xl border border-panelBorder bg-panel/80 p-4 shadow-panelGlow backdrop-blur-sm">
       <h2 className="mb-3 text-sm font-semibold uppercase tracking-[0.2em] text-accent">Component Palette</h2>
+      <p className="mb-3 text-xs text-slate-300">Click any component to add it to the canvas.</p>
       <div className="space-y-2">
         {items.map((item) => (
           <button
             type="button"
             key={item.type}
+            onClick={() => onAddComponent(item.type)}
             className="w-full rounded-lg border border-panelBorder/80 bg-[#04182c] px-3 py-2 text-left text-sm transition hover:border-accent hover:bg-[#06233d]"
           >
             <div className="flex items-center justify-between">

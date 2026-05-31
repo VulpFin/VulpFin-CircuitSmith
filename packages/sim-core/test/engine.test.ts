@@ -110,4 +110,69 @@ describe('SimulationEngine', () => {
     snapshot = engine.step();
     expect(outputValue(snapshot, 'led')).toBe('0');
   });
+
+  it('reports floating input diagnostics when gate pins are unconnected', () => {
+    const circuit: CircuitDefinition = {
+      id: 'floating-demo',
+      name: 'Floating Input Demo',
+      nodes: [
+        { id: 'inA', nodeType: 'INPUT', position: { x: 0, y: 0 } },
+        { id: 'g1', nodeType: 'AND', position: { x: 120, y: 20 } },
+      ],
+      wires: [{ id: 'w1', from: { nodeId: 'inA', pinId: 'OUT' }, to: { nodeId: 'g1', pinId: 'A' } }],
+      nets: [
+        {
+          id: 'net_1',
+          wireIds: ['w1'],
+          driverPins: [{ nodeId: 'inA', pinId: 'OUT' }],
+          loadPins: [{ nodeId: 'g1', pinId: 'A' }],
+        },
+      ],
+    };
+
+    const engine = new SimulationEngine(circuit);
+    const snapshot = engine.step();
+
+    const floatingWarnings = snapshot.diagnostics.filter((item) => item.code === 'floating-input');
+    expect(floatingWarnings.length).toBeGreaterThan(0);
+  });
+
+  it('reports conflicting driver diagnostics on shared input nets', () => {
+    const circuit: CircuitDefinition = {
+      id: 'conflict-demo',
+      name: 'Conflict Demo',
+      nodes: [
+        { id: 'a', nodeType: 'INPUT', position: { x: 0, y: 0 } },
+        { id: 'b', nodeType: 'INPUT', position: { x: 0, y: 80 } },
+        { id: 'out', nodeType: 'OUTPUT', position: { x: 180, y: 40 } },
+      ],
+      wires: [
+        { id: 'w1', from: { nodeId: 'a', pinId: 'OUT' }, to: { nodeId: 'out', pinId: 'IN' } },
+        { id: 'w2', from: { nodeId: 'b', pinId: 'OUT' }, to: { nodeId: 'out', pinId: 'IN' } },
+      ],
+      nets: [
+        {
+          id: 'net_1',
+          wireIds: ['w1'],
+          driverPins: [{ nodeId: 'a', pinId: 'OUT' }],
+          loadPins: [{ nodeId: 'out', pinId: 'IN' }],
+        },
+        {
+          id: 'net_2',
+          wireIds: ['w2'],
+          driverPins: [{ nodeId: 'b', pinId: 'OUT' }],
+          loadPins: [{ nodeId: 'out', pinId: 'IN' }],
+        },
+      ],
+    };
+
+    const engine = new SimulationEngine(circuit);
+    engine.setInput('a', '1');
+    engine.setInput('b', '0');
+    const snapshot = engine.step();
+
+    const conflictErrors = snapshot.diagnostics.filter((item) => item.code === 'conflicting-drivers');
+    expect(conflictErrors.length).toBeGreaterThan(0);
+    expect(outputValue(snapshot, 'out')).toBe('ERR');
+  });
 });

@@ -4,11 +4,29 @@ import { DEFAULT_NODE_LIBRARY, GATE_NODE_TYPES, SEQUENTIAL_NODE_TYPES } from './
 
 type PinValueMap = Record<string, LogicValue>;
 
+export type SimulationDiagnosticCode =
+  | 'floating-input'
+  | 'conflicting-drivers'
+  | 'missing-node-definition'
+  | 'combinational-not-stable';
+
+export interface SimulationDiagnostic {
+  code: SimulationDiagnosticCode;
+  severity: 'warning' | 'error';
+  message: string;
+  nodeId?: string;
+  pinId?: string;
+  netId?: string;
+}
+
 export interface SimulationSnapshot {
   tick: number;
   running: boolean;
   nodeOutputs: Record<string, PinValueMap>;
   nodeStates: Record<string, Record<string, unknown>>;
+  netValues: Record<string, LogicValue>;
+  diagnostics: SimulationDiagnostic[];
+  stabilized: boolean;
 }
 
 interface NodeRuntimeState {
@@ -26,6 +44,8 @@ export class SimulationEngine {
 
   private readonly inboundMap: Map<string, Map<string, InboundEntry[]>> = new Map();
 
+  private readonly orderedNodes: NodeInstance[];
+
   private outputs: Record<string, PinValueMap> = {};
 
   private states: Record<string, NodeRuntimeState> = {};
@@ -34,7 +54,16 @@ export class SimulationEngine {
 
   private tick = 0;
 
+  private netValues: Record<string, LogicValue> = {};
+
+  private diagnostics: SimulationDiagnostic[] = [];
+
+  private diagnosticKeys = new Set<string>();
+
+  private stabilized = true;
+
   constructor(private readonly circuit: CircuitDefinition) {
+    this.orderedNodes = [...circuit.nodes].sort((a, b) => a.id.localeCompare(b.id));
     this.initializeInboundMap();
     this.reset();
   }
@@ -53,12 +82,11 @@ export class SimulationEngine {
       throw new Error(`Node ${nodeId} is not an INPUT node.`);
     }
 
-    const nextValue = value;
     this.states[nodeId] = {
       ...this.states[nodeId],
-      value: nextValue,
+      value,
     };
-    this.outputs[nodeId] = { OUT: nextValue };
+    this.outputs[nodeId] = { OUT: value };
   }
 
   public getSnapshot(): SimulationSnapshot {
@@ -67,6 +95,9 @@ export class SimulationEngine {
       running: this.running,
       nodeOutputs: structuredClone(this.outputs),
       nodeStates: structuredClone(this.states) as Record<string, Record<string, unknown>>,
+      netValues: structuredClone(this.netValues),
+      diagnostics: [...this.diagnostics],
+      stabilized: this.stabilized,
     };
   }
 
@@ -74,10 +105,20 @@ export class SimulationEngine {
     this.tick = 0;
     this.outputs = {};
     this.states = {};
+    this.netValues = {};
+    this.diagnostics = [];
+    this.diagnosticKeys.clear();
+    this.stabilized = true;
 
-    for (const node of this.circuit.nodes) {
+    for (const node of this.orderedNodes) {
       const definition = this.library[node.nodeType];
       if (!definition) {
+        this.addDiagnostic({
+          code: 'missing-node-definition',
+          severity: 'error',
+          nodeId: node.id,
+          message: `No node definition was found for ${node.nodeType}.`,
+        });
         continue;
       }
 
@@ -111,16 +152,29 @@ export class SimulationEngine {
       }
     }
 
+    this.refreshNetValues();
     return this.getSnapshot();
   }
 
   public step(): SimulationSnapshot {
     this.tick += 1;
+    this.diagnostics = [];
+    this.diagnosticKeys.clear();
 
     this.evaluateSources();
-    this.evaluateCombinational();
+    this.stabilized = this.evaluateCombinational();
     this.evaluateSequential();
     this.captureOutputNodes();
+    this.refreshNetValues();
+
+    if (!this.stabilized) {
+      this.addDiagnostic({
+        code: 'combinational-not-stable',
+        severity: 'warning',
+        message:
+          'Combinational network did not stabilize within the pass limit. This may indicate an oscillation or unresolved feedback loop.',
+      });
+    }
 
     return this.getSnapshot();
   }
@@ -144,7 +198,7 @@ export class SimulationEngine {
   }
 
   private evaluateSources(): void {
-    for (const node of this.circuit.nodes) {
+    for (const node of this.orderedNodes) {
       if (node.nodeType === 'INPUT') {
         const value = (this.states[node.id]?.value ?? '0') as LogicValue;
         this.outputs[node.id] = { OUT: value };
@@ -159,16 +213,14 @@ export class SimulationEngine {
     }
   }
 
-  private evaluateCombinational(): void {
-    const maxIterations = Math.max(4, this.circuit.nodes.length * 2);
+  private evaluateCombinational(): boolean {
+    const gateNodes = this.orderedNodes.filter((node) => GATE_NODE_TYPES.has(node.nodeType));
+    const maxIterations = Math.max(4, gateNodes.length * 2);
+
     for (let pass = 0; pass < maxIterations; pass += 1) {
       let changed = false;
 
-      for (const node of this.circuit.nodes) {
-        if (!GATE_NODE_TYPES.has(node.nodeType)) {
-          continue;
-        }
-
+      for (const node of gateNodes) {
         const inputValues = this.readAllNodeInputs(node);
         const gate = node.nodeType as 'NOT' | 'AND' | 'OR' | 'NAND' | 'NOR' | 'XOR' | 'XNOR';
         const nextOut = logicGateOutput(gate, inputValues);
@@ -181,13 +233,15 @@ export class SimulationEngine {
       }
 
       if (!changed) {
-        break;
+        return true;
       }
     }
+
+    return false;
   }
 
   private evaluateSequential(): void {
-    for (const node of this.circuit.nodes) {
+    for (const node of this.orderedNodes) {
       if (!SEQUENTIAL_NODE_TYPES.has(node.nodeType)) {
         continue;
       }
@@ -229,7 +283,7 @@ export class SimulationEngine {
   }
 
   private captureOutputNodes(): void {
-    for (const node of this.circuit.nodes) {
+    for (const node of this.orderedNodes) {
       if (node.nodeType !== 'OUTPUT') {
         continue;
       }
@@ -242,9 +296,38 @@ export class SimulationEngine {
     }
   }
 
+  private refreshNetValues(): void {
+    const values: Record<string, LogicValue> = {};
+
+    for (const net of this.circuit.nets) {
+      const driverValues = net.driverPins.map(
+        (driver) => this.outputs[driver.nodeId]?.[driver.pinId] ?? LogicConstants.LOGIC_HIGH_Z,
+      );
+      const value = resolveDrivers(driverValues);
+      values[net.id] = value;
+
+      if (value === LogicConstants.LOGIC_ERROR) {
+        this.addDiagnostic({
+          code: 'conflicting-drivers',
+          severity: 'error',
+          netId: net.id,
+          message: `Net ${net.id} has conflicting driver values.`,
+        });
+      }
+    }
+
+    this.netValues = values;
+  }
+
   private readAllNodeInputs(node: NodeInstance): LogicValue[] {
     const definition = this.library[node.nodeType];
     if (!definition) {
+      this.addDiagnostic({
+        code: 'missing-node-definition',
+        severity: 'error',
+        nodeId: node.id,
+        message: `No node definition was found for ${node.nodeType}.`,
+      });
       return [LogicConstants.LOGIC_UNKNOWN];
     }
 
@@ -253,11 +336,43 @@ export class SimulationEngine {
 
   private readInput(nodeId: string, pinId: string): LogicValue {
     const entries = this.inboundMap.get(nodeId)?.get(pinId) ?? [];
-    const values = entries
-      .map((entry) => this.outputs[entry.from.nodeId]?.[entry.from.pinId] ?? LogicConstants.LOGIC_HIGH_Z)
-      .filter((value): value is LogicValue => Boolean(value));
+    if (entries.length === 0) {
+      this.addDiagnostic({
+        code: 'floating-input',
+        severity: 'warning',
+        nodeId,
+        pinId,
+        message: `Input ${nodeId}.${pinId} is floating (no incoming wire).`,
+      });
+      return LogicConstants.LOGIC_HIGH_Z;
+    }
 
-    return resolveDrivers(values);
+    const values = entries.map(
+      (entry) => this.outputs[entry.from.nodeId]?.[entry.from.pinId] ?? LogicConstants.LOGIC_HIGH_Z,
+    );
+
+    const resolved = resolveDrivers(values);
+    if (resolved === LogicConstants.LOGIC_ERROR) {
+      this.addDiagnostic({
+        code: 'conflicting-drivers',
+        severity: 'error',
+        nodeId,
+        pinId,
+        message: `Input ${nodeId}.${pinId} has conflicting drivers.`,
+      });
+    }
+
+    return resolved;
+  }
+
+  private addDiagnostic(diagnostic: SimulationDiagnostic): void {
+    const key = [diagnostic.code, diagnostic.nodeId, diagnostic.pinId, diagnostic.netId, diagnostic.message].join('|');
+    if (this.diagnosticKeys.has(key)) {
+      return;
+    }
+
+    this.diagnosticKeys.add(key);
+    this.diagnostics.push(diagnostic);
   }
 
   private nodeParameterAsNumber(node: NodeInstance, key: string, fallback: number): number {

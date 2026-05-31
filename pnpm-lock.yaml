@@ -83,8 +83,16 @@ importers:
       '@vfcs/circuit-model':
         specifier: workspace:*
         version: link:../circuit-model
+    devDependencies:
+      vitest:
+        specifier: ^2.1.9
+        version: 2.1.9(@types/node@22.19.19)
 
-  packages/integrations: {}
+  packages/integrations:
+    dependencies:
+      '@vfcs/part-mapper':
+        specifier: workspace:*
+        version: link:../part-mapper
 
   packages/part-mapper:
     dependencies:

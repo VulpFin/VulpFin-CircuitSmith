@@ -1,13 +1,31 @@
 import type { CircuitDefinition, LogicValue } from '@vfcs/circuit-model';
 import { getMappingsForLogicalType } from '@vfcs/part-mapper';
+import { DEFAULT_NODE_LIBRARY } from '@vfcs/sim-core';
+
+interface PendingWireSource {
+  nodeId: string;
+  pinId: string;
+}
 
 interface InspectorPanelProps {
   circuit: CircuitDefinition;
   selectedNodeId: string | null;
   nodeOutputs: Record<string, Record<string, LogicValue>>;
+  pendingWireSource: PendingWireSource | null;
+  onStartWireFromPin: (source: PendingWireSource) => void;
+  onCancelPendingWire: () => void;
+  onDeleteNode: (nodeId: string) => void;
 }
 
-export function InspectorPanel({ circuit, selectedNodeId, nodeOutputs }: InspectorPanelProps) {
+export function InspectorPanel({
+  circuit,
+  selectedNodeId,
+  nodeOutputs,
+  pendingWireSource,
+  onStartWireFromPin,
+  onCancelPendingWire,
+  onDeleteNode,
+}: InspectorPanelProps) {
   const node = circuit.nodes.find((entry) => entry.id === selectedNodeId) ?? null;
 
   if (!node) {
@@ -21,6 +39,7 @@ export function InspectorPanel({ circuit, selectedNodeId, nodeOutputs }: Inspect
 
   const outputs = nodeOutputs[node.id] ?? {};
   const mappings = getMappingsForLogicalType(node.nodeType);
+  const definition = DEFAULT_NODE_LIBRARY[node.nodeType];
 
   return (
     <aside className="rounded-xl border border-panelBorder bg-panel/80 p-4 shadow-panelGlow backdrop-blur-sm">
@@ -29,6 +48,7 @@ export function InspectorPanel({ circuit, selectedNodeId, nodeOutputs }: Inspect
         <div>
           <div className="text-xs uppercase tracking-[0.15em] text-accentSoft">Node</div>
           <div className="font-semibold">{node.label ?? node.id}</div>
+          <div className="text-slate-300">ID: {node.id}</div>
           <div className="text-slate-300">Type: {node.nodeType}</div>
         </div>
 
@@ -47,6 +67,40 @@ export function InspectorPanel({ circuit, selectedNodeId, nodeOutputs }: Inspect
           </ul>
         </div>
 
+        {definition?.outputPins.length ? (
+          <div>
+            <div className="text-xs uppercase tracking-[0.15em] text-accentSoft">Wire Source</div>
+            <div className="mt-1 space-y-2">
+              {definition.outputPins.map((pin) => {
+                const active = pendingWireSource?.nodeId === node.id && pendingWireSource?.pinId === pin.id;
+                return (
+                  <button
+                    key={pin.id}
+                    type="button"
+                    onClick={() => onStartWireFromPin({ nodeId: node.id, pinId: pin.id })}
+                    className={`w-full rounded border px-2 py-1 text-left text-xs uppercase tracking-[0.12em] transition ${
+                      active
+                        ? 'border-signalHot bg-[#40240e] text-signalHot'
+                        : 'border-panelBorder bg-[#031a30] hover:border-accent'
+                    }`}
+                  >
+                    Start wire from {pin.name}
+                  </button>
+                );
+              })}
+              {pendingWireSource ? (
+                <button
+                  type="button"
+                  onClick={onCancelPendingWire}
+                  className="w-full rounded border border-panelBorder bg-[#031a30] px-2 py-1 text-left text-xs uppercase tracking-[0.12em] hover:border-accent"
+                >
+                  Cancel wire mode
+                </button>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+
         <div>
           <div className="text-xs uppercase tracking-[0.15em] text-accentSoft">Physical Mapping</div>
           {mappings.length === 0 ? (
@@ -62,6 +116,14 @@ export function InspectorPanel({ circuit, selectedNodeId, nodeOutputs }: Inspect
             </ul>
           )}
         </div>
+
+        <button
+          type="button"
+          onClick={() => onDeleteNode(node.id)}
+          className="w-full rounded border border-[#6e2e2e] bg-[#301111] px-3 py-2 text-xs uppercase tracking-[0.12em] text-[#ffb5b5] hover:border-[#8f3c3c]"
+        >
+          Delete Selected Node
+        </button>
       </div>
     </aside>
   );
