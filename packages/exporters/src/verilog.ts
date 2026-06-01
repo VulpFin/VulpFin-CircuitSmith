@@ -39,6 +39,12 @@ function driverSignals(circuit: CircuitDefinition, nodeId: string, pinId: string
       if (sourceNode.nodeType === 'INPUT' || sourceNode.nodeType === 'CLOCK') {
         return inputSignalForNode(sourceNode);
       }
+      if (sourceNode.nodeType === 'VCC') {
+        return "1'b1";
+      }
+      if (sourceNode.nodeType === 'GND' || sourceNode.nodeType === 'VSS') {
+        return "1'b0";
+      }
 
       return nodePinSignal(wire.from.nodeId, wire.from.pinId);
     })
@@ -212,7 +218,15 @@ export function exportCircuitAsVerilog(circuit: CircuitDefinition): VerilogExpor
       continue;
     }
 
-    if (node.nodeType === 'INPUT' || node.nodeType === 'OUTPUT' || node.nodeType === 'LED' || node.nodeType === 'CLOCK') {
+    if (
+      node.nodeType === 'INPUT'
+      || node.nodeType === 'OUTPUT'
+      || node.nodeType === 'LED'
+      || node.nodeType === 'CLOCK'
+      || node.nodeType === 'VCC'
+      || node.nodeType === 'GND'
+      || node.nodeType === 'VSS'
+    ) {
       continue;
     }
 

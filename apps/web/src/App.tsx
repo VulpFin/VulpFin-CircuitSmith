@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   BRANDING,
+  type ChipAppearance,
+  type ChipDefinition,
   cloneCircuit,
   createChipDefinitionFromCircuit,
   createNodeInstanceId,
@@ -8,10 +10,9 @@ import {
   recalculateNets,
   removeNodeAndConnections,
   sanitizeId,
-  type ChipAppearance,
-  type ChipDefinition,
   type CircuitDefinition,
   type LogicValue,
+  type NodeInstance,
   type Position,
 } from '@vfcs/circuit-model';
 import { exportCircuitAsLigicJson, exportCircuitAsVerilog } from '@vfcs/exporters';
@@ -36,6 +37,10 @@ const WORKSPACE_NODE_WIDTH = 164;
 const WORKSPACE_NODE_HEIGHT = 100;
 const MIN_WORKSPACE_WIDTH = 900;
 const MIN_WORKSPACE_HEIGHT = 440;
+const CHIP_MIN_WIDTH = 120;
+const CHIP_MAX_WIDTH = 480;
+const CHIP_MIN_HEIGHT = 84;
+const CHIP_MAX_HEIGHT = 280;
 
 interface WorkspaceSize {
   width: number;
@@ -45,6 +50,11 @@ interface WorkspaceSize {
 interface PendingWireSource {
   nodeId: string;
   pinId: string;
+}
+
+interface NodeSize {
+  width: number;
+  height: number;
 }
 
 const DEFAULT_CHIP_APPEARANCE: ChipAppearanceDraft = {
@@ -72,6 +82,26 @@ function clampNodeToWorkspace(position: Position, workspaceSize: WorkspaceSize):
   return {
     x: clamp(position.x, 0, Math.max(0, workspaceSize.width - WORKSPACE_NODE_WIDTH)),
     y: clamp(position.y, 0, Math.max(0, workspaceSize.height - WORKSPACE_NODE_HEIGHT)),
+  };
+}
+
+function nodeSize(node: NodeInstance): NodeSize {
+  if (node.nodeType !== 'CHIP') {
+    return { width: WORKSPACE_NODE_WIDTH, height: WORKSPACE_NODE_HEIGHT };
+  }
+
+  const widthRaw = Number(node.parameters?.width ?? 176);
+  const heightRaw = Number(node.parameters?.height ?? 104);
+  const width = Number.isFinite(widthRaw) ? clamp(Math.round(widthRaw), CHIP_MIN_WIDTH, CHIP_MAX_WIDTH) : 176;
+  const height = Number.isFinite(heightRaw) ? clamp(Math.round(heightRaw), CHIP_MIN_HEIGHT, CHIP_MAX_HEIGHT) : 104;
+
+  return { width, height };
+}
+
+function clampNodeToWorkspaceWithSize(position: Position, workspaceSize: WorkspaceSize, size: NodeSize): Position {
+  return {
+    x: clamp(position.x, 0, Math.max(0, workspaceSize.width - size.width)),
+    y: clamp(position.y, 0, Math.max(0, workspaceSize.height - size.height)),
   };
 }
 
@@ -123,6 +153,71 @@ function readChipLibrary(): ChipDefinition[] {
 
 function createDraftId(): string {
   return `draft_${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {};
+}
+
+function buildPinDraftsFromChip(chip: ChipDefinition): ChipPinDraft[] {
+  const pinLayout = asRecord(chip.metadata?.pinLayout);
+  const pinBindings = asRecord(chip.metadata?.pinBindings);
+  const inputNodeIds = chip.internalCircuit.nodes
+    .filter((node) => node.nodeType === 'INPUT' || node.nodeType === 'CLOCK')
+    .map((node) => node.id);
+  const outputNodeIds = chip.internalCircuit.nodes
+    .filter((node) => node.nodeType === 'OUTPUT' || node.nodeType === 'LED')
+    .map((node) => node.id);
+
+  const used = new Set<string>();
+  const nextInputSource = () => {
+    const next = inputNodeIds.find((nodeId) => !used.has(nodeId));
+    if (next) {
+      used.add(next);
+    }
+    return next;
+  };
+  const nextOutputSource = () => {
+    const next = outputNodeIds.find((nodeId) => !used.has(nodeId));
+    if (next) {
+      used.add(next);
+    }
+    return next;
+  };
+
+  return chip.publicPins.map((pin, index) => {
+    const rawBinding = asRecord(pinBindings[pin.id]);
+    let sourceNodeId = typeof rawBinding.sourceNodeId === 'string' ? rawBinding.sourceNodeId : undefined;
+    if (sourceNodeId) {
+      used.add(sourceNodeId);
+    }
+
+    if (!sourceNodeId) {
+      if (pin.direction === 'output') {
+        sourceNodeId = nextOutputSource();
+      } else if (pin.direction === 'input') {
+        sourceNodeId = nextInputSource();
+      } else {
+        sourceNodeId = nextInputSource() ?? nextOutputSource();
+      }
+    }
+
+    const rawPoint = asRecord(pinLayout[pin.id]);
+    const fallback = createDefaultPinPosition(pin.direction, index);
+    const pinX = typeof rawPoint.x === 'number' && Number.isFinite(rawPoint.x) ? rawPoint.x : fallback.x;
+    const pinY = typeof rawPoint.y === 'number' && Number.isFinite(rawPoint.y) ? rawPoint.y : fallback.y;
+
+    return {
+      draftId: createDraftId(),
+      enabled: true,
+      id: pin.id,
+      name: pin.name,
+      direction: pin.direction,
+      sourceNodeId,
+      pinX,
+      pinY,
+    } satisfies ChipPinDraft;
+  });
 }
 
 function buildPinDraftsFromCircuit(circuit: CircuitDefinition, existing: ChipPinDraft[]): ChipPinDraft[] {
@@ -201,8 +296,11 @@ export default function App() {
   const [running, setRunning] = useState(false);
   const [statusMessage, setStatusMessage] = useState('Ready.');
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>('tff_main');
+  const [selectedWireId, setSelectedWireId] = useState<string | null>(null);
   const [pendingWireSource, setPendingWireSource] = useState<PendingWireSource | null>(null);
   const [exportPreview, setExportPreview] = useState(initialExportPreview);
+  const [clipboardNode, setClipboardNode] = useState<NodeInstance | null>(null);
+  const [editingChipId, setEditingChipId] = useState<string | null>(null);
 
   const [chipLibrary, setChipLibrary] = useState<ChipDefinition[]>(readChipLibrary);
   const [chipIdDraft, setChipIdDraft] = useState('chip_tff_demo');
@@ -282,15 +380,22 @@ export default function App() {
     setNodePositions((previous) => {
       const next: Record<string, Position> = {};
       for (const node of circuit.nodes) {
-        next[node.id] = clampNodeToWorkspace(previous[node.id] ?? node.position, workspaceSize);
+        next[node.id] = clampNodeToWorkspaceWithSize(
+          previous[node.id] ?? node.position,
+          workspaceSize,
+          nodeSize(node),
+        );
       }
       return next;
     });
   }, [circuit.nodes, workspaceSize]);
 
   useEffect(() => {
+    if (editingChipId) {
+      return;
+    }
     setChipPinDrafts((previous) => buildPinDraftsFromCircuit(circuit, previous));
-  }, [circuit]);
+  }, [circuit, editingChipId]);
 
   useEffect(() => {
     if (!running) {
@@ -309,6 +414,131 @@ export default function App() {
   useEffect(() => {
     window.localStorage.setItem(CHIP_LIBRARY_STORAGE_KEY, JSON.stringify(chipLibrary));
   }, [chipLibrary]);
+
+  const selectNode = (nodeId: string) => {
+    setSelectedNodeId(nodeId);
+    setSelectedWireId(null);
+  };
+
+  const selectWire = (wireId: string) => {
+    setSelectedWireId(wireId);
+    setSelectedNodeId(null);
+  };
+
+  const clearSelection = () => {
+    setSelectedNodeId(null);
+    setSelectedWireId(null);
+  };
+
+  const copySelectedNode = () => {
+    if (!selectedNodeId) {
+      return;
+    }
+    const node = displayCircuit.nodes.find((entry) => entry.id === selectedNodeId);
+    if (!node) {
+      return;
+    }
+    setClipboardNode(structuredClone(node));
+    setStatusMessage(`Copied node ${node.id}.`);
+  };
+
+  const pasteClipboardNode = () => {
+    if (!clipboardNode) {
+      setStatusMessage('No copied node yet. Select a node and press Ctrl+C first.');
+      return;
+    }
+
+    setCircuit((previous) => {
+      const id = createNodeInstanceId(previous, clipboardNode.nodeType);
+      const existing = previous.nodes.find((entry) => entry.id === clipboardNode.id);
+      const sourceNode = existing ?? clipboardNode;
+      const size = nodeSize(sourceNode);
+      const basePosition = nodePositions[selectedNodeId ?? ''] ?? sourceNode.position;
+      const position = clampNodeToWorkspaceWithSize(
+        {
+          x: basePosition.x + 28,
+          y: basePosition.y + 24,
+        },
+        workspaceSize,
+        size,
+      );
+      const next = cloneCircuit(previous);
+      next.nodes.push({
+        ...structuredClone(sourceNode),
+        id,
+        label: sourceNode.label ? `${sourceNode.label} Copy` : undefined,
+        position,
+      });
+      setSelectedNodeId(id);
+      setSelectedWireId(null);
+      return recalculateNets(next);
+    });
+    setStatusMessage(`Pasted ${clipboardNode.nodeType} node.`);
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (
+        target
+        && (target.tagName === 'INPUT'
+          || target.tagName === 'TEXTAREA'
+          || target.isContentEditable)
+      ) {
+        return;
+      }
+
+      const mod = event.ctrlKey || event.metaKey;
+
+      if (mod && event.key.toLowerCase() === 'c') {
+        event.preventDefault();
+        copySelectedNode();
+        return;
+      }
+
+      if (mod && event.key.toLowerCase() === 'v') {
+        event.preventDefault();
+        pasteClipboardNode();
+        return;
+      }
+
+      if (!mod && (event.key === 'Delete' || event.key === 'Backspace')) {
+        if (selectedWireId) {
+          event.preventDefault();
+          setCircuit((previous) => {
+            const next = cloneCircuit(previous);
+            next.wires = next.wires.filter((wire) => wire.id !== selectedWireId);
+            return recalculateNets(next);
+          });
+          setStatusMessage(`Deleted wire ${selectedWireId}.`);
+          setSelectedWireId(null);
+          return;
+        }
+
+        if (selectedNodeId) {
+          event.preventDefault();
+          setCircuit((previous) => removeNodeAndConnections(previous, selectedNodeId));
+          setSelectedNodeId(null);
+          setSelectedWireId(null);
+          if (pendingWireSource?.nodeId === selectedNodeId) {
+            setPendingWireSource(null);
+          }
+          setStatusMessage(`Deleted node ${selectedNodeId} and detached connected wires.`);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [
+    clipboardNode,
+    nodePositions,
+    pendingWireSource?.nodeId,
+    selectedNodeId,
+    selectedWireId,
+    workspaceSize,
+    displayCircuit.nodes,
+  ]);
 
   const step = () => {
     setSnapshot(engineRef.current.step());
@@ -348,15 +578,8 @@ export default function App() {
     const nextValue: LogicValue = current === '1' ? '0' : '1';
 
     engineRef.current.setInput(nodeId, nextValue);
-    setSnapshot(engineRef.current.step());
-    updateCircuitNode(nodeId, (entry) => ({
-      ...entry,
-      state: {
-        ...(entry.state ?? {}),
-        value: nextValue,
-      },
-    }));
-    setStatusMessage(`Toggled ${nodeId} to ${nextValue} and stepped simulation.`);
+    setSnapshot(engineRef.current.getSnapshot());
+    setStatusMessage(`Toggled ${nodeId} to ${nextValue}.`);
   };
 
   const updateClockFrequency = (nodeId: string, frequencyHz: number) => {
@@ -412,6 +635,7 @@ export default function App() {
       };
 
       setSelectedNodeId(id);
+      setSelectedWireId(null);
       return recalculateNets(nextCircuit);
     });
 
@@ -445,6 +669,7 @@ export default function App() {
       });
 
       setSelectedNodeId(id);
+      setSelectedWireId(null);
       return recalculateNets(next);
     });
 
@@ -452,15 +677,18 @@ export default function App() {
   };
 
   const moveNode = (nodeId: string, position: Position) => {
+    const node = displayCircuit.nodes.find((entry) => entry.id === nodeId);
+    const size = node ? nodeSize(node) : { width: WORKSPACE_NODE_WIDTH, height: WORKSPACE_NODE_HEIGHT };
     setNodePositions((previous) => ({
       ...previous,
-      [nodeId]: clampNodeToWorkspace(position, workspaceSize),
+      [nodeId]: clampNodeToWorkspaceWithSize(position, workspaceSize, size),
     }));
   };
 
   const deleteNode = (nodeId: string) => {
     setCircuit((previous) => removeNodeAndConnections(previous, nodeId));
     setSelectedNodeId((previous) => (previous === nodeId ? null : previous));
+    setSelectedWireId(null);
     if (pendingWireSource?.nodeId === nodeId) {
       setPendingWireSource(null);
     }
@@ -531,6 +759,7 @@ export default function App() {
     });
 
     setPendingWireSource(null);
+    setSelectedWireId(null);
     setStatusMessage(
       `Connected ${pendingWireSource.nodeId}.${pendingWireSource.pinId} -> ${targetNodeId}.${targetPin.id}.`,
     );
@@ -573,6 +802,201 @@ export default function App() {
     connectPendingWireToPin(targetNodeId, pinToUse.id);
   };
 
+  const deleteWire = (wireId: string) => {
+    setCircuit((previous) => {
+      const next = cloneCircuit(previous);
+      next.wires = next.wires.filter((wire) => wire.id !== wireId);
+      return recalculateNets(next);
+    });
+    setSelectedWireId((previous) => (previous === wireId ? null : previous));
+    setStatusMessage(`Deleted wire ${wireId}.`);
+  };
+
+  const updateWireTargetPin = (wireId: string, targetPinId: string) => {
+    const wire = circuit.wires.find((entry) => entry.id === wireId);
+    if (!wire) {
+      setStatusMessage(`Wire ${wireId} was not found.`);
+      return;
+    }
+
+    const targetNode = displayCircuit.nodes.find((node) => node.id === wire.to.nodeId);
+    if (!targetNode) {
+      setStatusMessage(`Target node ${wire.to.nodeId} was not found.`);
+      return;
+    }
+
+    const targetPins = resolveNodePins(targetNode, chipLibrary).inputPins;
+    if (!targetPins.some((pin) => pin.id === targetPinId)) {
+      setStatusMessage(`Pin ${targetPinId} is not a valid input pin on ${targetNode.id}.`);
+      return;
+    }
+
+    const occupied = circuit.wires.find(
+      (entry) =>
+        entry.id !== wireId
+        && entry.to.nodeId === wire.to.nodeId
+        && entry.to.pinId === targetPinId,
+    );
+    if (occupied) {
+      setStatusMessage(`Pin ${wire.to.nodeId}.${targetPinId} is already connected.`);
+      return;
+    }
+
+    setCircuit((previous) => {
+      const next = cloneCircuit(previous);
+      next.wires = next.wires.map((entry) =>
+        entry.id === wireId
+          ? {
+              ...entry,
+              to: {
+                ...entry.to,
+                pinId: targetPinId,
+              },
+            }
+          : entry,
+      );
+      return recalculateNets(next);
+    });
+    setStatusMessage(`Wire ${wireId} target switched to ${wire.to.nodeId}.${targetPinId}.`);
+  };
+
+  const updateWireSourcePin = (wireId: string, sourcePinId: string) => {
+    const wire = circuit.wires.find((entry) => entry.id === wireId);
+    if (!wire) {
+      setStatusMessage(`Wire ${wireId} was not found.`);
+      return;
+    }
+
+    const sourceNode = displayCircuit.nodes.find((node) => node.id === wire.from.nodeId);
+    if (!sourceNode) {
+      setStatusMessage(`Source node ${wire.from.nodeId} was not found.`);
+      return;
+    }
+
+    const sourcePins = resolveNodePins(sourceNode, chipLibrary).outputPins;
+    if (!sourcePins.some((pin) => pin.id === sourcePinId)) {
+      setStatusMessage(`Pin ${sourcePinId} is not a valid output pin on ${sourceNode.id}.`);
+      return;
+    }
+
+    setCircuit((previous) => {
+      const next = cloneCircuit(previous);
+      next.wires = next.wires.map((entry) =>
+        entry.id === wireId
+          ? {
+              ...entry,
+              from: {
+                ...entry.from,
+                pinId: sourcePinId,
+              },
+            }
+          : entry,
+      );
+      return recalculateNets(next);
+    });
+    setStatusMessage(`Wire ${wireId} source switched to ${wire.from.nodeId}.${sourcePinId}.`);
+  };
+
+  const updateChipInstanceSize = (nodeId: string, width: number, height: number) => {
+    const clampedWidth = clamp(Math.round(width), CHIP_MIN_WIDTH, CHIP_MAX_WIDTH);
+    const clampedHeight = clamp(Math.round(height), CHIP_MIN_HEIGHT, CHIP_MAX_HEIGHT);
+    updateCircuitNode(nodeId, (entry) => ({
+      ...entry,
+      parameters: {
+        ...(entry.parameters ?? {}),
+        width: clampedWidth,
+        height: clampedHeight,
+      },
+    }));
+    setStatusMessage(`Resized ${nodeId} to ${clampedWidth} x ${clampedHeight}.`);
+  };
+
+  const loadChipIntoDesigner = (chipId: string) => {
+    const chip = chipLibrary.find((entry) => entry.id === chipId);
+    if (!chip) {
+      setStatusMessage(`Chip ${chipId} not found.`);
+      return;
+    }
+
+    const appearance = asRecord(chip.metadata?.appearance);
+    setChipIdDraft(chip.id);
+    setChipNameDraft(chip.name);
+    setChipPinDrafts(buildPinDraftsFromChip(chip));
+    setChipAppearanceDraft({
+      shape:
+        appearance.shape === 'rounded' || appearance.shape === 'seven-segment'
+          ? appearance.shape
+          : DEFAULT_CHIP_APPEARANCE.shape,
+      bodyColor:
+        typeof appearance.bodyColor === 'string' ? appearance.bodyColor : DEFAULT_CHIP_APPEARANCE.bodyColor,
+      accentColor:
+        typeof appearance.accentColor === 'string' ? appearance.accentColor : DEFAULT_CHIP_APPEARANCE.accentColor,
+      textColor:
+        typeof appearance.textColor === 'string' ? appearance.textColor : DEFAULT_CHIP_APPEARANCE.textColor,
+      symbol: typeof appearance.symbol === 'string' ? appearance.symbol : DEFAULT_CHIP_APPEARANCE.symbol,
+    });
+    setEditingChipId(chip.id);
+    setStatusMessage(`Loaded ${chip.name} for editing in chip designer.`);
+  };
+
+  const importChipJson = (payload: string) => {
+    try {
+      const parsed = JSON.parse(payload) as unknown;
+      const candidates = Array.isArray(parsed) ? parsed : [parsed];
+      const incoming: ChipDefinition[] = [];
+
+      for (const candidate of candidates) {
+        if (typeof candidate !== 'object' || candidate === null) {
+          continue;
+        }
+
+        const chip = candidate as ChipDefinition;
+        if (!chip.id || !chip.name || !Array.isArray(chip.publicPins) || !chip.internalCircuit) {
+          continue;
+        }
+        incoming.push(chip);
+      }
+
+      if (incoming.length === 0) {
+        setStatusMessage('No valid chip definitions were found in the import payload.');
+        return;
+      }
+
+      setChipLibrary((previous) => {
+        const byId = new Map(previous.map((chip) => [chip.id, chip]));
+        for (const chip of incoming) {
+          byId.set(chip.id, chip);
+        }
+        return [...byId.values()];
+      });
+      setStatusMessage(`Imported ${incoming.length} chip definition(s).`);
+    } catch {
+      setStatusMessage('Chip import failed: invalid JSON payload.');
+    }
+  };
+
+  const exportChipJsonToClipboard = async (chipId: string) => {
+    const chip = chipLibrary.find((entry) => entry.id === chipId);
+    if (!chip) {
+      setStatusMessage(`Chip ${chipId} was not found.`);
+      return;
+    }
+
+    const payload = JSON.stringify(chip, null, 2);
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(payload);
+        setStatusMessage(`Copied ${chip.name} JSON to clipboard.`);
+      } else {
+        setExportPreview(payload);
+        setStatusMessage(`Clipboard unavailable; ${chip.name} JSON pushed to preview panel.`);
+      }
+    } catch {
+      setExportPreview(payload);
+      setStatusMessage(`Clipboard write failed; ${chip.name} JSON pushed to preview panel.`);
+    }
+  };
+
   const createChip = () => {
     const chipId = sanitizeId(chipIdDraft || chipNameDraft || 'chip');
     if (!chipId || !chipNameDraft.trim()) {
@@ -607,18 +1031,21 @@ export default function App() {
       },
     });
 
+    const wasExisting = chipLibrary.some((entry) => entry.id === chip.id);
     setChipLibrary((previous) => {
       const filtered = previous.filter((entry) => entry.id !== chip.id);
       return [chip, ...filtered];
     });
+    setEditingChipId(chip.id);
 
     setStatusMessage(
-      `Saved chip ${chip.name} (${chip.id}) with ${chip.publicPins.length} public pins and custom layout.`,
+      `${wasExisting ? 'Updated' : 'Saved'} chip ${chip.name} (${chip.id}) with ${chip.publicPins.length} public pins.`,
     );
   };
 
   const clearChipLibrary = () => {
     setChipLibrary([]);
+    setEditingChipId(null);
     setStatusMessage('Cleared local chip library.');
   };
 
@@ -648,6 +1075,15 @@ export default function App() {
     setChipPinDrafts((previous) =>
       previous.map((draft) => (draft.draftId === draftId ? { ...draft, ...patch } : draft)),
     );
+  };
+
+  const resetChipDesigner = () => {
+    setEditingChipId(null);
+    setChipIdDraft('chip_tff_demo');
+    setChipNameDraft('T Flip-Flop Demo Chip');
+    setChipPinDrafts(buildPinDraftsFromCircuit(circuit, []));
+    setChipAppearanceDraft(DEFAULT_CHIP_APPEARANCE);
+    setStatusMessage('Reset chip designer to current workspace pin defaults.');
   };
 
   const exportLigic = () => {
@@ -761,6 +1197,9 @@ export default function App() {
             ? `Wire mode: ${pendingWireSource.nodeId}.${pendingWireSource.pinId} -> click target node`
             : 'Wire mode inactive'}
         </span>
+        <span className="rounded border border-panelBorder px-2 py-1 text-slate-300">
+          Keys: Del deletes selected, Ctrl/Cmd+C copy node, Ctrl/Cmd+V paste node
+        </span>
 
         <label className="rounded border border-panelBorder px-2 py-1 text-slate-300">
           Canvas W
@@ -817,9 +1256,12 @@ export default function App() {
           nodeOutputs={snapshot.nodeOutputs}
           nodeStates={snapshot.nodeStates}
           selectedNodeId={selectedNodeId}
+          selectedWireId={selectedWireId}
           pendingWireSource={pendingWireSource}
           chipLibrary={chipLibrary}
-          onSelectNode={setSelectedNodeId}
+          onSelectNode={selectNode}
+          onSelectWire={selectWire}
+          onClearSelection={clearSelection}
           onMoveNode={moveNode}
           onAttemptConnectToNode={attemptConnectToNode}
           onToggleInputNode={toggleInputNode}
@@ -827,16 +1269,22 @@ export default function App() {
         <InspectorPanel
           circuit={displayCircuit}
           selectedNodeId={selectedNodeId}
+          selectedWireId={selectedWireId}
           nodeOutputs={snapshot.nodeOutputs}
           pendingWireSource={pendingWireSource}
           chipLibrary={chipLibrary}
           onStartWireFromPin={startWireFromPin}
           onCancelPendingWire={() => setPendingWireSource(null)}
           onConnectPendingWireToPin={connectPendingWireToPin}
+          onDeleteWire={deleteWire}
+          onUpdateWireSourcePin={updateWireSourcePin}
+          onUpdateWireTargetPin={updateWireTargetPin}
           onDeleteNode={deleteNode}
           onToggleInputNode={toggleInputNode}
           onUpdateNodeLabel={updateNodeLabel}
           onUpdateClockFrequency={updateClockFrequency}
+          onUpdateChipInstanceSize={updateChipInstanceSize}
+          onLoadChipIntoDesigner={loadChipIntoDesigner}
           clockTick={snapshot.tick}
           clockRunning={running}
           clockInfo={nextClockTransitions}
@@ -846,10 +1294,16 @@ export default function App() {
       <ChipLibraryPanel
         chipIdDraft={chipIdDraft}
         chipNameDraft={chipNameDraft}
+        editingChipId={editingChipId}
         chipLibrary={chipLibrary}
         chipPinDrafts={chipPinDrafts}
         chipAppearanceDraft={chipAppearanceDraft}
-        onChipIdDraftChange={setChipIdDraft}
+        onChipIdDraftChange={(value) => {
+          setChipIdDraft(value);
+          if (editingChipId && value !== editingChipId) {
+            setEditingChipId(null);
+          }
+        }}
         onChipNameDraftChange={setChipNameDraft}
         onChipPinDraftChange={updateChipPinDraft}
         onAddChipPinDraft={addChipPinDraft}
@@ -858,6 +1312,10 @@ export default function App() {
         onCreateChip={createChip}
         onClearLibrary={clearChipLibrary}
         onAddChipToWorkspace={addChipInstance}
+        onEditChip={loadChipIntoDesigner}
+        onExportChipJson={exportChipJsonToClipboard}
+        onImportChipJson={importChipJson}
+        onResetDesigner={resetChipDesigner}
       />
 
       <StatusPanel

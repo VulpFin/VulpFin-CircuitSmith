@@ -176,6 +176,10 @@ export class SimulationEngine {
         this.outputs[node.id] = { OUT: runtimeState.value ?? '0' };
       } else if (node.nodeType === 'CLOCK') {
         this.outputs[node.id] = { OUT: '0' };
+      } else if (node.nodeType === 'VCC') {
+        this.outputs[node.id] = { OUT: '1' };
+      } else if (node.nodeType === 'GND' || node.nodeType === 'VSS') {
+        this.outputs[node.id] = { OUT: '0' };
       } else if (node.nodeType === 'DFF') {
         const q = runtimeState.q ?? '0';
         this.outputs[node.id] = { Q: q, Q_BAR: invert(q) };
@@ -271,6 +275,14 @@ export class SimulationEngine {
         const phase = Math.floor(this.tick / halfCycleTicks) % 2;
         const nextValue: LogicValue = phase === 0 ? '0' : '1';
         this.outputs[node.id] = { OUT: nextValue };
+      }
+
+      if (node.nodeType === 'VCC') {
+        this.outputs[node.id] = { OUT: '1' };
+      }
+
+      if (node.nodeType === 'GND' || node.nodeType === 'VSS') {
+        this.outputs[node.id] = { OUT: '0' };
       }
     }
   }

@@ -344,4 +344,28 @@ describe('SimulationEngine', () => {
     const snapshot = engine.step();
     expect(outputValue(snapshot, 'sink')).toBe('1');
   });
+
+  it('supports fixed power rails using VCC and GND nodes', () => {
+    const circuit: CircuitDefinition = {
+      id: 'power-rails-demo',
+      name: 'Power Rails Demo',
+      nodes: [
+        { id: 'vcc', nodeType: 'VCC', position: { x: 0, y: 0 } },
+        { id: 'gnd', nodeType: 'GND', position: { x: 0, y: 80 } },
+        { id: 'out_hi', nodeType: 'OUTPUT', position: { x: 200, y: 0 } },
+        { id: 'out_lo', nodeType: 'OUTPUT', position: { x: 200, y: 80 } },
+      ],
+      wires: [
+        { id: 'w1', from: { nodeId: 'vcc', pinId: 'OUT' }, to: { nodeId: 'out_hi', pinId: 'IN' } },
+        { id: 'w2', from: { nodeId: 'gnd', pinId: 'OUT' }, to: { nodeId: 'out_lo', pinId: 'IN' } },
+      ],
+      nets: [],
+    };
+
+    const engine = new SimulationEngine(circuit);
+    const snapshot = engine.step();
+
+    expect(outputValue(snapshot, 'out_hi')).toBe('1');
+    expect(outputValue(snapshot, 'out_lo')).toBe('0');
+  });
 });

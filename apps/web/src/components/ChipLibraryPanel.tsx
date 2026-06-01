@@ -24,6 +24,7 @@ export interface ChipAppearanceDraft {
 interface ChipLibraryPanelProps {
   chipIdDraft: string;
   chipNameDraft: string;
+  editingChipId: string | null;
   chipLibrary: ChipDefinition[];
   chipPinDrafts: ChipPinDraft[];
   chipAppearanceDraft: ChipAppearanceDraft;
@@ -36,6 +37,10 @@ interface ChipLibraryPanelProps {
   onCreateChip: () => void;
   onClearLibrary: () => void;
   onAddChipToWorkspace: (chipId: string) => void;
+  onEditChip: (chipId: string) => void;
+  onExportChipJson: (chipId: string) => void;
+  onImportChipJson: (payload: string) => void;
+  onResetDesigner: () => void;
 }
 
 interface PinDragState {
@@ -56,6 +61,7 @@ function draftPoint(draft: ChipPinDraft): { x: number; y: number } {
 export function ChipLibraryPanel({
   chipIdDraft,
   chipNameDraft,
+  editingChipId,
   chipLibrary,
   chipPinDrafts,
   chipAppearanceDraft,
@@ -68,9 +74,14 @@ export function ChipLibraryPanel({
   onCreateChip,
   onClearLibrary,
   onAddChipToWorkspace,
+  onEditChip,
+  onExportChipJson,
+  onImportChipJson,
+  onResetDesigner,
 }: ChipLibraryPanelProps) {
   const previewRef = useRef<HTMLDivElement | null>(null);
   const [dragState, setDragState] = useState<PinDragState | null>(null);
+  const [importDraft, setImportDraft] = useState('');
 
   useEffect(() => {
     if (!dragState) {
@@ -114,6 +125,11 @@ export function ChipLibraryPanel({
       <p className="mb-3 text-xs text-slate-300">
         Design custom chips (like 7-segment modules), choose public pins, place them on the chip face, then save and place them from the palette.
       </p>
+      {editingChipId ? (
+        <p className="mb-3 rounded border border-panelBorder/70 bg-[#031a30] px-2 py-1 text-xs text-signalHot">
+          Editing existing chip: {editingChipId}
+        </p>
+      ) : null}
 
       <div className="grid gap-2 md:grid-cols-2">
         <label className="text-xs uppercase tracking-[0.12em] text-accentSoft">
@@ -325,7 +341,14 @@ export function ChipLibraryPanel({
           onClick={onCreateChip}
           className="rounded border border-accent bg-[#083251] px-3 py-2 text-xs uppercase tracking-[0.12em] hover:bg-[#0a3b5f]"
         >
-          Save Chip
+          {editingChipId ? 'Update Chip' : 'Save Chip'}
+        </button>
+        <button
+          type="button"
+          onClick={onResetDesigner}
+          className="rounded border border-panelBorder bg-[#031a30] px-3 py-2 text-xs uppercase tracking-[0.12em] hover:border-accent"
+        >
+          Reset Designer
         </button>
         <button
           type="button"
@@ -337,13 +360,32 @@ export function ChipLibraryPanel({
       </div>
 
       <div className="mt-3 rounded-lg border border-panelBorder/70 bg-[#020f1e] p-3">
+        <div className="mb-2 text-xs uppercase tracking-[0.15em] text-accentSoft">Import Chip JSON</div>
+        <textarea
+          value={importDraft}
+          onChange={(event) => setImportDraft(event.target.value)}
+          placeholder='Paste one chip JSON object or an array of chips here...'
+          className="h-24 w-full rounded border border-panelBorder bg-[#031a30] px-2 py-1 text-xs text-slate-100 outline-none focus:border-accent"
+        />
+        <div className="mt-2">
+          <button
+            type="button"
+            onClick={() => onImportChipJson(importDraft)}
+            className="rounded border border-panelBorder bg-[#031a30] px-3 py-1 text-[10px] uppercase tracking-[0.12em] hover:border-accent"
+          >
+            Import JSON
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-3 rounded-lg border border-panelBorder/70 bg-[#020f1e] p-3">
         <div className="mb-2 text-xs uppercase tracking-[0.15em] text-accentSoft">Saved Chips ({chipLibrary.length})</div>
         {chipLibrary.length === 0 ? (
           <p className="text-xs text-slate-300">No chips saved yet.</p>
         ) : (
           <div className="space-y-2 text-xs text-slate-200">
-            {chipLibrary.slice(0, 8).map((chip) => (
-              <div key={chip.id} className="flex items-center justify-between rounded border border-panelBorder/60 bg-[#031a30] p-2">
+            {chipLibrary.slice(0, 12).map((chip) => (
+              <div key={chip.id} className="rounded border border-panelBorder/60 bg-[#031a30] p-2">
                 <div>
                   <div>
                     {chip.name} ({chip.id})
@@ -352,13 +394,29 @@ export function ChipLibraryPanel({
                     Pins: {chip.publicPins.length} Version: {chip.version}
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => onAddChipToWorkspace(chip.id)}
-                  className="rounded border border-panelBorder bg-[#06233d] px-2 py-1 text-[10px] uppercase tracking-[0.12em] hover:border-accent"
-                >
-                  Place
-                </button>
+                <div className="mt-2 flex flex-wrap gap-1">
+                  <button
+                    type="button"
+                    onClick={() => onAddChipToWorkspace(chip.id)}
+                    className="rounded border border-panelBorder bg-[#06233d] px-2 py-1 text-[10px] uppercase tracking-[0.12em] hover:border-accent"
+                  >
+                    Place
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onEditChip(chip.id)}
+                    className="rounded border border-panelBorder bg-[#06233d] px-2 py-1 text-[10px] uppercase tracking-[0.12em] hover:border-accent"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onExportChipJson(chip.id)}
+                    className="rounded border border-panelBorder bg-[#06233d] px-2 py-1 text-[10px] uppercase tracking-[0.12em] hover:border-accent"
+                  >
+                    Copy JSON
+                  </button>
+                </div>
               </div>
             ))}
           </div>

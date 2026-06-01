@@ -7,10 +7,30 @@ export interface PaletteItem {
   symbol: string;
 }
 
-const ORDER = ['INPUT', 'LED', 'OUTPUT', 'CLOCK', 'NOT', 'AND', 'OR', 'NAND', 'NOR', 'XOR', 'XNOR', 'DFF', 'TFF'];
+const ORDER = [
+  'INPUT',
+  'VCC',
+  'GND',
+  'VSS',
+  'LED',
+  'OUTPUT',
+  'CLOCK',
+  'NOT',
+  'AND',
+  'OR',
+  'NAND',
+  'NOR',
+  'XOR',
+  'XNOR',
+  'DFF',
+  'TFF',
+];
 
 const SYMBOL_BY_TYPE: Record<string, string> = {
   INPUT: 'IN',
+  VCC: 'VCC',
+  GND: 'GND',
+  VSS: 'VSS',
   OUTPUT: 'OUT',
   LED: 'LED',
   CLOCK: 'CLK',
