@@ -14,6 +14,10 @@ interface PendingWireSource {
 
 interface WorkspaceCanvasProps {
   circuit: CircuitDefinition;
+  workspaceSize: {
+    width: number;
+    height: number;
+  };
   nodeOutputs: Record<string, Record<string, LogicValue>>;
   nodeStates: Record<string, Record<string, unknown>>;
   selectedNodeId: string | null;
@@ -74,7 +78,7 @@ function outputSignalForNode(
   nodeOutputs: Record<string, Record<string, LogicValue>>,
   nodeStates: Record<string, Record<string, unknown>>,
 ): LogicValue {
-  if (nodeType === 'OUTPUT') {
+  if (nodeType === 'OUTPUT' || nodeType === 'LED') {
     const stateValue = nodeStates[nodeId]?.value as LogicValue | undefined;
     return stateValue ?? 'X';
   }
@@ -91,6 +95,7 @@ function outputSignalForNode(
 
 export function WorkspaceCanvas({
   circuit,
+  workspaceSize,
   nodeOutputs,
   nodeStates,
   selectedNodeId,
@@ -154,7 +159,16 @@ export function WorkspaceCanvas({
         Drag nodes to reposition. Double-click INPUT nodes to toggle. Use inspector pin controls to start wiring.
       </p>
 
-      <div ref={containerRef} className="relative min-h-[440px] overflow-hidden rounded-lg border border-panelBorder/60">
+      <div className="overflow-auto">
+        <div
+          ref={containerRef}
+          className="relative overflow-hidden rounded-lg border border-panelBorder/60"
+          style={{
+            width: `${workspaceSize.width}px`,
+            minHeight: `${workspaceSize.height}px`,
+            height: `${workspaceSize.height}px`,
+          }}
+        >
         <svg className="pointer-events-none absolute inset-0 h-full w-full">
           {circuit.wires.map((wire) => {
             const sourceNode = nodeById.get(wire.from.nodeId);
@@ -260,20 +274,28 @@ export function WorkspaceCanvas({
                 {node.label ?? node.id}
               </div>
 
-              {node.nodeType === 'OUTPUT' ? (
+              {node.nodeType === 'LED' ? (
                 <div className="mt-2 flex items-center gap-2 text-xs text-slate-300">
                   <span className={`led-indicator ${firstSignal === '1' ? 'led-on' : 'led-off'}`} />
                   LED: {firstSignal}
                 </div>
               ) : null}
 
+              {node.nodeType === 'OUTPUT' ? (
+                <div className="mt-2 text-xs text-slate-300">OUT: {firstSignal}</div>
+              ) : null}
+
               {node.nodeType === 'CLOCK' ? (
-                <div className="mt-2 text-xs text-slate-300">
-                  Freq: {Number(node.parameters?.frequencyHz ?? 1).toLocaleString()} Hz
+                <div className="mt-2 space-y-1 text-xs text-slate-300">
+                  <div>Freq: {Number(node.parameters?.frequencyHz ?? 1).toLocaleString()} Hz</div>
+                  <div className="flex items-center gap-2">
+                    <span className={`led-indicator ${firstSignal === '1' ? 'led-on' : 'led-off'}`} />
+                    CLK: {firstSignal}
+                  </div>
                 </div>
               ) : null}
 
-              {node.nodeType !== 'OUTPUT' && node.nodeType !== 'CLOCK' ? (
+              {node.nodeType !== 'OUTPUT' && node.nodeType !== 'LED' && node.nodeType !== 'CLOCK' ? (
                 <div className="mt-1 text-xs text-slate-300">Signal: {firstSignal}</div>
               ) : null}
 
@@ -297,6 +319,7 @@ export function WorkspaceCanvas({
             </button>
           );
         })}
+        </div>
       </div>
     </section>
   );

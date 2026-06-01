@@ -206,4 +206,142 @@ describe('SimulationEngine', () => {
 
     expect(outputValue(first, 'led_fast')).not.toBe(outputValue(second, 'led_fast'));
   });
+
+  it('simulates custom CHIP instances using pin bindings', () => {
+    const chipInternal: CircuitDefinition = {
+      id: 'chip_and_internal',
+      name: 'AND Chip Internal',
+      nodes: [
+        { id: 'in0', nodeType: 'INPUT', position: { x: 0, y: 0 } },
+        { id: 'in1', nodeType: 'INPUT', position: { x: 0, y: 80 } },
+        { id: 'and0', nodeType: 'AND', position: { x: 120, y: 40 } },
+        { id: 'out0', nodeType: 'OUTPUT', position: { x: 240, y: 40 } },
+      ],
+      wires: [
+        { id: 'w1', from: { nodeId: 'in0', pinId: 'OUT' }, to: { nodeId: 'and0', pinId: 'A' } },
+        { id: 'w2', from: { nodeId: 'in1', pinId: 'OUT' }, to: { nodeId: 'and0', pinId: 'B' } },
+        { id: 'w3', from: { nodeId: 'and0', pinId: 'OUT' }, to: { nodeId: 'out0', pinId: 'IN' } },
+      ],
+      nets: [],
+    };
+
+    const circuit: CircuitDefinition = {
+      id: 'chip_top',
+      name: 'Chip Top',
+      nodes: [
+        { id: 'a', nodeType: 'INPUT', position: { x: 0, y: 0 } },
+        { id: 'b', nodeType: 'INPUT', position: { x: 0, y: 80 } },
+        {
+          id: 'chip1',
+          nodeType: 'CHIP',
+          chipRefId: 'chip_and_2',
+          position: { x: 140, y: 30 },
+          parameters: {
+            pinBindings: {
+              A: { sourceNodeId: 'in0', direction: 'input' },
+              B: { sourceNodeId: 'in1', direction: 'input' },
+              Y: { sourceNodeId: 'out0', direction: 'output' },
+            },
+          },
+        },
+        { id: 'led', nodeType: 'OUTPUT', position: { x: 280, y: 40 } },
+      ],
+      wires: [
+        { id: 'w1', from: { nodeId: 'a', pinId: 'OUT' }, to: { nodeId: 'chip1', pinId: 'A' } },
+        { id: 'w2', from: { nodeId: 'b', pinId: 'OUT' }, to: { nodeId: 'chip1', pinId: 'B' } },
+        { id: 'w3', from: { nodeId: 'chip1', pinId: 'Y' }, to: { nodeId: 'led', pinId: 'IN' } },
+      ],
+      nets: [],
+    };
+
+    const engine = new SimulationEngine(circuit, {
+      chipLibrary: [
+        {
+          id: 'chip_and_2',
+          name: 'AND2',
+          version: '0.1.0',
+          publicPins: [
+            { id: 'A', name: 'A', direction: 'input' },
+            { id: 'B', name: 'B', direction: 'input' },
+            { id: 'Y', name: 'Y', direction: 'output' },
+          ],
+          internalCircuit: chipInternal,
+        },
+      ],
+    });
+
+    engine.setInput('a', '1');
+    engine.setInput('b', '1');
+    let snapshot = engine.step();
+    expect(outputValue(snapshot, 'led')).toBe('1');
+
+    engine.setInput('b', '0');
+    snapshot = engine.step();
+    expect(outputValue(snapshot, 'led')).toBe('0');
+  });
+
+  it('captures LED node state as output sink', () => {
+    const circuit: CircuitDefinition = {
+      id: 'led-sink-demo',
+      name: 'LED Sink Demo',
+      nodes: [
+        { id: 'in1', nodeType: 'INPUT', position: { x: 0, y: 0 } },
+        { id: 'led', nodeType: 'LED', position: { x: 160, y: 0 } },
+      ],
+      wires: [{ id: 'w1', from: { nodeId: 'in1', pinId: 'OUT' }, to: { nodeId: 'led', pinId: 'IN' } }],
+      nets: [],
+    };
+
+    const engine = new SimulationEngine(circuit);
+    engine.setInput('in1', '1');
+    const snapshot = engine.step();
+    expect(outputValue(snapshot, 'led')).toBe('1');
+  });
+
+  it('falls back to interface node order for legacy chips without pin bindings', () => {
+    const chipInternal: CircuitDefinition = {
+      id: 'legacy_buf_internal',
+      name: 'Legacy Buffer Internal',
+      nodes: [
+        { id: 'in0', nodeType: 'INPUT', position: { x: 0, y: 0 } },
+        { id: 'out0', nodeType: 'OUTPUT', position: { x: 160, y: 0 } },
+      ],
+      wires: [{ id: 'w1', from: { nodeId: 'in0', pinId: 'OUT' }, to: { nodeId: 'out0', pinId: 'IN' } }],
+      nets: [],
+    };
+
+    const circuit: CircuitDefinition = {
+      id: 'legacy_chip_top',
+      name: 'Legacy Chip Top',
+      nodes: [
+        { id: 'src', nodeType: 'INPUT', position: { x: 0, y: 0 } },
+        { id: 'chip1', nodeType: 'CHIP', chipRefId: 'legacy_buf', position: { x: 120, y: 0 } },
+        { id: 'sink', nodeType: 'OUTPUT', position: { x: 260, y: 0 } },
+      ],
+      wires: [
+        { id: 'w1', from: { nodeId: 'src', pinId: 'OUT' }, to: { nodeId: 'chip1', pinId: 'IN' } },
+        { id: 'w2', from: { nodeId: 'chip1', pinId: 'OUT' }, to: { nodeId: 'sink', pinId: 'IN' } },
+      ],
+      nets: [],
+    };
+
+    const engine = new SimulationEngine(circuit, {
+      chipLibrary: [
+        {
+          id: 'legacy_buf',
+          name: 'Legacy Buf',
+          version: '0.0.1',
+          publicPins: [
+            { id: 'IN', name: 'IN', direction: 'input' },
+            { id: 'OUT', name: 'OUT', direction: 'output' },
+          ],
+          internalCircuit: chipInternal,
+        },
+      ],
+    });
+
+    engine.setInput('src', '1');
+    const snapshot = engine.step();
+    expect(outputValue(snapshot, 'sink')).toBe('1');
+  });
 });

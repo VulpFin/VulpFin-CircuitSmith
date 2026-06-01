@@ -11,7 +11,15 @@ export const DEFAULT_NODE_LIBRARY: Record<string, NodeDefinition> = {
   },
   OUTPUT: {
     type: 'OUTPUT',
-    label: 'Output/LED',
+    label: 'Output Probe',
+    category: 'io',
+    inputPins: [{ id: 'IN', name: 'In', direction: 'input' }],
+    outputPins: [],
+    defaultState: { value: 'X' },
+  },
+  LED: {
+    type: 'LED',
+    label: 'LED Output',
     category: 'io',
     inputPins: [{ id: 'IN', name: 'In', direction: 'input' }],
     outputPins: [],

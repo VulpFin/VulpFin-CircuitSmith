@@ -15,10 +15,20 @@ interface InspectorPanelProps {
   chipLibrary: ChipDefinition[];
   onStartWireFromPin: (source: PendingWireSource) => void;
   onCancelPendingWire: () => void;
+  onConnectPendingWireToPin: (targetNodeId: string, targetPinId: string) => void;
   onDeleteNode: (nodeId: string) => void;
   onToggleInputNode: (nodeId: string) => void;
   onUpdateNodeLabel: (nodeId: string, label: string) => void;
   onUpdateClockFrequency: (nodeId: string, frequencyHz: number) => void;
+  clockTick: number;
+  clockRunning: boolean;
+  clockInfo: Array<{
+    nodeId: string;
+    nextTick: number;
+    nextState: LogicValue;
+    ticksUntilToggle: number;
+    secondsToToggle: number | null;
+  }>;
 }
 
 const MIN_CLOCK_HZ = 1;
@@ -32,10 +42,14 @@ export function InspectorPanel({
   chipLibrary,
   onStartWireFromPin,
   onCancelPendingWire,
+  onConnectPendingWireToPin,
   onDeleteNode,
   onToggleInputNode,
   onUpdateNodeLabel,
   onUpdateClockFrequency,
+  clockTick,
+  clockRunning,
+  clockInfo,
 }: InspectorPanelProps) {
   const node = circuit.nodes.find((entry) => entry.id === selectedNodeId) ?? null;
 
@@ -52,6 +66,7 @@ export function InspectorPanel({
   const mappings = getMappingsForLogicalType(node.nodeType);
   const pinInfo = resolveNodePins(node, chipLibrary);
   const chipPinLayout = resolveChipPinLayout(node, chipLibrary);
+  const selectedClockInfo = clockInfo.find((entry) => entry.nodeId === node.id);
 
   const currentClockHzRaw = Number(node.parameters?.frequencyHz ?? 1);
   const currentClockHz = Number.isFinite(currentClockHzRaw)
@@ -122,6 +137,18 @@ export function InspectorPanel({
                 className="mt-1 w-full rounded border border-panelBorder bg-[#031a30] px-2 py-1 text-sm text-slate-100 outline-none focus:border-accent"
               />
             </label>
+            <div className="mt-2 rounded border border-panelBorder/70 bg-[#031a30] p-2 text-xs text-slate-300">
+              <div>Tick now: {clockTick}</div>
+              <div>Next toggle tick: {selectedClockInfo?.nextTick ?? '-'}</div>
+              <div>Ticks until toggle: {selectedClockInfo?.ticksUntilToggle ?? '-'}</div>
+              <div>Next state: {selectedClockInfo?.nextState ?? '-'}</div>
+              <div>
+                ETA:{' '}
+                {clockRunning && selectedClockInfo?.secondsToToggle != null
+                  ? `${selectedClockInfo.secondsToToggle.toFixed(2)}s at current sim pace`
+                  : 'start Run Simulation for real-time ETA'}
+              </div>
+            </div>
           </div>
         ) : null}
 
@@ -163,11 +190,34 @@ export function InspectorPanel({
           <div>
             <div className="text-xs uppercase tracking-[0.15em] text-accentSoft">Input Pins</div>
             <ul className="mt-1 space-y-1 text-xs text-slate-300">
-              {pinInfo.inputPins.map((pin) => (
-                <li key={pin.id}>
-                  {pin.name} ({pin.id})
-                </li>
-              ))}
+              {pinInfo.inputPins.map((pin) => {
+                const connected = circuit.wires.some(
+                  (wire) => wire.to.nodeId === node.id && wire.to.pinId === pin.id,
+                );
+                const canConnect =
+                  Boolean(pendingWireSource)
+                  && pendingWireSource.nodeId !== node.id
+                  && !connected;
+
+                return (
+                  <li key={pin.id} className="rounded border border-panelBorder/50 bg-[#031a30] p-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span>
+                        {pin.name} ({pin.id}) {connected ? '[wired]' : '[open]'}
+                      </span>
+                      {canConnect ? (
+                        <button
+                          type="button"
+                          onClick={() => onConnectPendingWireToPin(node.id, pin.id)}
+                          className="rounded border border-panelBorder px-2 py-[2px] text-[10px] uppercase tracking-[0.12em] hover:border-accent"
+                        >
+                          Connect Here
+                        </button>
+                      ) : null}
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           </div>
         ) : null}

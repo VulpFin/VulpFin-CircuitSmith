@@ -1,8 +1,25 @@
-import type { CircuitDefinition, LogicValue, NodeInstance, PinReference } from '@vfcs/circuit-model';
+import type { ChipDefinition, CircuitDefinition, LogicValue, NodeInstance, PinReference } from '@vfcs/circuit-model';
 import { LogicConstants, logicGateOutput, invert, resolveDrivers } from './logic.js';
 import { DEFAULT_NODE_LIBRARY, GATE_NODE_TYPES, SEQUENTIAL_NODE_TYPES } from './library.js';
 
 type PinValueMap = Record<string, LogicValue>;
+
+interface ChipPinBinding {
+  sourceNodeId?: string;
+  direction?: 'input' | 'output' | 'bidirectional';
+}
+
+interface ChipRuntime {
+  engine: SimulationEngine;
+  inputBindings: Record<string, string>;
+  outputBindings: Record<string, string>;
+}
+
+export interface SimulationEngineOptions {
+  chipLibrary?: ChipDefinition[];
+  chipDepth?: number;
+  maxChipDepth?: number;
+}
 
 export type SimulationDiagnosticCode =
   | 'floating-input'
@@ -46,6 +63,16 @@ export class SimulationEngine {
 
   private readonly orderedNodes: NodeInstance[];
 
+  private readonly chipLibrary: ChipDefinition[];
+
+  private readonly chipById: Map<string, ChipDefinition> = new Map();
+
+  private readonly chipRuntimeByNodeId: Map<string, ChipRuntime> = new Map();
+
+  private readonly chipDepth: number;
+
+  private readonly maxChipDepth: number;
+
   private outputs: Record<string, PinValueMap> = {};
 
   private states: Record<string, NodeRuntimeState> = {};
@@ -62,7 +89,16 @@ export class SimulationEngine {
 
   private stabilized = true;
 
-  constructor(private readonly circuit: CircuitDefinition) {
+  constructor(
+    private readonly circuit: CircuitDefinition,
+    options: SimulationEngineOptions = {},
+  ) {
+    this.chipLibrary = options.chipLibrary ?? [];
+    this.chipDepth = options.chipDepth ?? 0;
+    this.maxChipDepth = options.maxChipDepth ?? 4;
+    for (const chip of this.chipLibrary) {
+      this.chipById.set(chip.id, chip);
+    }
     this.orderedNodes = [...circuit.nodes].sort((a, b) => a.id.localeCompare(b.id));
     this.initializeInboundMap();
     this.reset();
@@ -109,6 +145,7 @@ export class SimulationEngine {
     this.diagnostics = [];
     this.diagnosticKeys.clear();
     this.stabilized = true;
+    this.chipRuntimeByNodeId.clear();
 
     for (const node of this.orderedNodes) {
       const definition = this.library[node.nodeType];
@@ -144,6 +181,25 @@ export class SimulationEngine {
         this.outputs[node.id] = { Q: q, Q_BAR: invert(q) };
       } else if (node.nodeType === 'TFF') {
         this.outputs[node.id] = { Q: runtimeState.q ?? '0' };
+      } else if (node.nodeType === 'CHIP') {
+        const chip = node.chipRefId ? this.chipById.get(node.chipRefId) : null;
+        if (!chip) {
+          this.addDiagnostic({
+            code: 'missing-node-definition',
+            severity: 'error',
+            nodeId: node.id,
+            message: `No chip definition was found for ${node.chipRefId ?? '(missing chipRefId)'}.`,
+          });
+          this.outputs[node.id] = {};
+          continue;
+        }
+
+        const outputPins = chip.publicPins.filter(
+          (pin) => pin.direction === 'output' || pin.direction === 'bidirectional',
+        );
+        this.outputs[node.id] = Object.fromEntries(
+          outputPins.map((pin) => [pin.id, LogicConstants.LOGIC_UNKNOWN]),
+        ) as PinValueMap;
       } else if (definition.outputPins.length > 0) {
         const outputPins = Object.fromEntries(
           definition.outputPins.map((pin) => [pin.id, LogicConstants.LOGIC_UNKNOWN]),
@@ -162,7 +218,10 @@ export class SimulationEngine {
     this.diagnosticKeys.clear();
 
     this.evaluateSources();
-    this.stabilized = this.evaluateCombinational();
+    const stabilizedBeforeChip = this.evaluateCombinational();
+    this.evaluateChipInstances();
+    const stabilizedAfterChip = this.evaluateCombinational();
+    this.stabilized = stabilizedBeforeChip && stabilizedAfterChip;
     this.evaluateSequential();
     this.captureOutputNodes();
     this.refreshNetValues();
@@ -285,9 +344,39 @@ export class SimulationEngine {
     }
   }
 
+  private evaluateChipInstances(): void {
+    for (const node of this.orderedNodes) {
+      if (node.nodeType !== 'CHIP') {
+        continue;
+      }
+
+      const runtime = this.resolveChipRuntime(node);
+      if (!runtime) {
+        continue;
+      }
+
+      const parentOutputMap = this.outputs[node.id] ?? {};
+
+      for (const [publicPinId, internalNodeId] of Object.entries(runtime.inputBindings)) {
+        const inputValue = this.readInput(node.id, publicPinId);
+        runtime.engine.setInput(internalNodeId, inputValue);
+      }
+
+      const childSnapshot = runtime.engine.step();
+
+      for (const [publicPinId, internalNodeId] of Object.entries(runtime.outputBindings)) {
+        const fromOutput = childSnapshot.nodeOutputs[internalNodeId]?.OUT as LogicValue | undefined;
+        const fromState = childSnapshot.nodeStates[internalNodeId]?.value as LogicValue | undefined;
+        parentOutputMap[publicPinId] = fromOutput ?? fromState ?? LogicConstants.LOGIC_UNKNOWN;
+      }
+
+      this.outputs[node.id] = parentOutputMap;
+    }
+  }
+
   private captureOutputNodes(): void {
     for (const node of this.orderedNodes) {
-      if (node.nodeType !== 'OUTPUT') {
+      if (node.nodeType !== 'OUTPUT' && node.nodeType !== 'LED') {
         continue;
       }
 
@@ -368,6 +457,209 @@ export class SimulationEngine {
     return resolved;
   }
 
+  private resolveChipRuntime(node: NodeInstance): ChipRuntime | null {
+    const existing = this.chipRuntimeByNodeId.get(node.id);
+    if (existing) {
+      return existing;
+    }
+
+    const chip = node.chipRefId ? this.chipById.get(node.chipRefId) : null;
+    if (!chip) {
+      this.addDiagnostic({
+        code: 'missing-node-definition',
+        severity: 'error',
+        nodeId: node.id,
+        message: `No chip definition was found for ${node.chipRefId ?? '(missing chipRefId)'}.`,
+      });
+      return null;
+    }
+
+    const pinBindings = this.resolvePinBindings(node, chip);
+    const childCircuit = this.prepareChipInternalCircuit(chip.internalCircuit, pinBindings);
+    if (this.chipDepth >= this.maxChipDepth) {
+      this.addDiagnostic({
+        code: 'missing-node-definition',
+        severity: 'error',
+        nodeId: node.id,
+        message: `Chip nesting exceeded max depth (${this.maxChipDepth}).`,
+      });
+      return null;
+    }
+
+    const childEngine = new SimulationEngine(childCircuit, {
+      chipLibrary: this.chipLibrary,
+      chipDepth: this.chipDepth + 1,
+      maxChipDepth: this.maxChipDepth,
+    });
+
+    const nodeById = new Map(childCircuit.nodes.map((entry) => [entry.id, entry]));
+    const inputBindings: Record<string, string> = {};
+    const outputBindings: Record<string, string> = {};
+
+    for (const publicPin of chip.publicPins) {
+      const binding = pinBindings[publicPin.id];
+      if (!binding?.sourceNodeId) {
+        continue;
+      }
+
+      const internalNode = nodeById.get(binding.sourceNodeId);
+      if (!internalNode) {
+        continue;
+      }
+
+      if (publicPin.direction === 'input' || publicPin.direction === 'bidirectional') {
+        if (internalNode.nodeType === 'INPUT') {
+          inputBindings[publicPin.id] = internalNode.id;
+        }
+      }
+
+      if (publicPin.direction === 'output' || publicPin.direction === 'bidirectional') {
+        if (
+          internalNode.nodeType === 'OUTPUT'
+          || internalNode.nodeType === 'LED'
+          || internalNode.nodeType === 'INPUT'
+          || internalNode.nodeType === 'CLOCK'
+        ) {
+          outputBindings[publicPin.id] = internalNode.id;
+        }
+      }
+    }
+
+    const runtime: ChipRuntime = {
+      engine: childEngine,
+      inputBindings,
+      outputBindings,
+    };
+    this.chipRuntimeByNodeId.set(node.id, runtime);
+
+    return runtime;
+  }
+
+  private resolvePinBindings(node: NodeInstance, chip: ChipDefinition): Record<string, ChipPinBinding> {
+    const fromNode = this.asPinBindingRecord(node.parameters?.pinBindings);
+    const fromChip = this.asPinBindingRecord(chip.metadata?.pinBindings);
+    const merged: Record<string, ChipPinBinding> = { ...fromChip, ...fromNode };
+
+    const nodeById = new Map(chip.internalCircuit.nodes.map((entry) => [entry.id, entry]));
+    const unboundInputNodes = chip.internalCircuit.nodes
+      .filter((entry) => entry.nodeType === 'INPUT' || entry.nodeType === 'CLOCK')
+      .map((entry) => entry.id);
+    const unboundOutputNodes = chip.internalCircuit.nodes
+      .filter((entry) => entry.nodeType === 'OUTPUT' || entry.nodeType === 'LED')
+      .map((entry) => entry.id);
+
+    for (const binding of Object.values(merged)) {
+      if (!binding.sourceNodeId) {
+        continue;
+      }
+      const idxIn = unboundInputNodes.indexOf(binding.sourceNodeId);
+      if (idxIn >= 0) {
+        unboundInputNodes.splice(idxIn, 1);
+      }
+      const idxOut = unboundOutputNodes.indexOf(binding.sourceNodeId);
+      if (idxOut >= 0) {
+        unboundOutputNodes.splice(idxOut, 1);
+      }
+    }
+
+    for (const publicPin of chip.publicPins) {
+      const current = merged[publicPin.id];
+      if (current?.sourceNodeId && nodeById.has(current.sourceNodeId)) {
+        continue;
+      }
+
+      if (publicPin.direction === 'input' || publicPin.direction === 'bidirectional') {
+        const nextInputNode = unboundInputNodes.shift();
+        if (nextInputNode) {
+          merged[publicPin.id] = {
+            sourceNodeId: nextInputNode,
+            direction: publicPin.direction,
+          };
+          continue;
+        }
+      }
+
+      if (publicPin.direction === 'output' || publicPin.direction === 'bidirectional') {
+        const nextOutputNode = unboundOutputNodes.shift();
+        if (nextOutputNode) {
+          merged[publicPin.id] = {
+            sourceNodeId: nextOutputNode,
+            direction: publicPin.direction,
+          };
+        }
+      }
+    }
+
+    return merged;
+  }
+
+  private asPinBindingRecord(value: unknown): Record<string, ChipPinBinding> {
+    if (typeof value !== 'object' || value === null) {
+      return {};
+    }
+
+    const record = value as Record<string, unknown>;
+    const output: Record<string, ChipPinBinding> = {};
+
+    for (const [pinId, candidate] of Object.entries(record)) {
+      if (typeof candidate !== 'object' || candidate === null) {
+        continue;
+      }
+
+      const maybeBinding = candidate as Record<string, unknown>;
+      const sourceNodeId =
+        typeof maybeBinding.sourceNodeId === 'string' && maybeBinding.sourceNodeId.length > 0
+          ? maybeBinding.sourceNodeId
+          : undefined;
+      const direction =
+        maybeBinding.direction === 'input' || maybeBinding.direction === 'output' || maybeBinding.direction === 'bidirectional'
+          ? maybeBinding.direction
+          : undefined;
+
+      output[pinId] = {
+        sourceNodeId,
+        direction,
+      };
+    }
+
+    return output;
+  }
+
+  private prepareChipInternalCircuit(
+    sourceCircuit: CircuitDefinition,
+    bindings: Record<string, ChipPinBinding>,
+  ): CircuitDefinition {
+    const nextCircuit = structuredClone(sourceCircuit);
+    const externallyDrivenNodeIds = new Set<string>();
+
+    for (const binding of Object.values(bindings)) {
+      if (!binding.sourceNodeId) {
+        continue;
+      }
+
+      if (binding.direction === 'input' || binding.direction === 'bidirectional') {
+        externallyDrivenNodeIds.add(binding.sourceNodeId);
+      }
+    }
+
+    nextCircuit.nodes = nextCircuit.nodes.map((entry) => {
+      if (entry.nodeType === 'CLOCK' && externallyDrivenNodeIds.has(entry.id)) {
+        return {
+          ...entry,
+          nodeType: 'INPUT',
+          state: {
+            ...(entry.state ?? {}),
+            value: '0',
+          },
+        };
+      }
+
+      return entry;
+    });
+
+    return nextCircuit;
+  }
+
   private addDiagnostic(diagnostic: SimulationDiagnostic): void {
     const key = [diagnostic.code, diagnostic.nodeId, diagnostic.pinId, diagnostic.netId, diagnostic.message].join('|');
     if (this.diagnosticKeys.has(key)) {
@@ -398,7 +690,8 @@ export class SimulationEngine {
     const clamped = Math.min(maxHz, Math.max(minHz, frequencyHz));
     const normalized = (Math.log10(clamped) - Math.log10(minHz)) / (Math.log10(maxHz) - Math.log10(minHz));
 
-    const slowestHalfCycleTicks = 200;
+    // Use a compressed clock scale for interactive UI simulation: full frequency range stays usable.
+    const slowestHalfCycleTicks = 12;
     const fastestHalfCycleTicks = 1;
     const mapped =
       slowestHalfCycleTicks - normalized * (slowestHalfCycleTicks - fastestHalfCycleTicks);

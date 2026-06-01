@@ -116,7 +116,8 @@ export function nodeSymbol(node: NodeInstance, chipLibrary: ChipDefinition[]): s
 
   const known: Record<string, string> = {
     INPUT: 'IN',
-    OUTPUT: 'LED',
+    OUTPUT: 'OUT',
+    LED: 'LED',
     CLOCK: 'CLK',
     NOT: 'NOT',
     AND: 'AND',

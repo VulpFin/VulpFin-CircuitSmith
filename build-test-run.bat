@@ -1,11 +1,5 @@
 @echo off
 echo Starting test...
-start corepack pnpm test
-echo Test completed. Starting build...
-start corepack pnpm build
-echo Build completed. Starting lint...
-start corepack pnpm lint
-echo Lint completed. Starting development server...
-corepack pnpm dev
-echo Build and development server completed.
+corepack pnpm test && echo "Test completed. Starting build..." && corepack pnpm build && echo "Build completed. Starting lint..." && corepack pnpm lint && "echo Lint completed. Starting development server..." && corepack pnpm dev
+echo Build complete and development server stopped
 pause > nul

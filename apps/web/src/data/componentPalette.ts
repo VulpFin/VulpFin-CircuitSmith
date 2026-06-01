@@ -7,11 +7,12 @@ export interface PaletteItem {
   symbol: string;
 }
 
-const ORDER = ['INPUT', 'OUTPUT', 'CLOCK', 'NOT', 'AND', 'OR', 'NAND', 'NOR', 'XOR', 'XNOR', 'DFF', 'TFF'];
+const ORDER = ['INPUT', 'LED', 'OUTPUT', 'CLOCK', 'NOT', 'AND', 'OR', 'NAND', 'NOR', 'XOR', 'XNOR', 'DFF', 'TFF'];
 
 const SYMBOL_BY_TYPE: Record<string, string> = {
   INPUT: 'IN',
-  OUTPUT: 'LED',
+  OUTPUT: 'OUT',
+  LED: 'LED',
   CLOCK: 'CLK',
   NOT: 'NOT',
   AND: 'AND',

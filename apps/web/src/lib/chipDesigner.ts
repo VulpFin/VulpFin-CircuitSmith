@@ -12,6 +12,13 @@ export interface ChipPinLayoutPoint {
 export interface BuiltChipPins {
   publicPins: PinDefinition[];
   pinLayout: Record<string, ChipPinLayoutPoint>;
+  pinBindings: Record<
+    string,
+    {
+      sourceNodeId?: string;
+      direction: PinDirection;
+    }
+  >;
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -73,6 +80,7 @@ export function buildChipPinsFromDrafts(drafts: ChipPinDraft[]): BuiltChipPins {
   const idUseCount = new Map<string, number>();
   const publicPins: PinDefinition[] = [];
   const pinLayout: Record<string, ChipPinLayoutPoint> = {};
+  const pinBindings: BuiltChipPins['pinBindings'] = {};
 
   for (const draft of enabled) {
     const baseId = sanitizePinId(draft.id);
@@ -102,11 +110,16 @@ export function buildChipPinsFromDrafts(drafts: ChipPinDraft[]): BuiltChipPins {
       x: sanitizePinPercent(draft.pinX ?? fallback.x),
       y: sanitizePinPercent(draft.pinY ?? fallback.y),
     };
+    pinBindings[uniqueId] = {
+      sourceNodeId: draft.sourceNodeId,
+      direction: draft.direction,
+    };
   }
 
   return {
     publicPins,
     pinLayout,
+    pinBindings,
   };
 }
 

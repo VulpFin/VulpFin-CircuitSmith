@@ -150,7 +150,7 @@ export function exportCircuitAsVerilog(circuit: CircuitDefinition): VerilogExpor
   const moduleName = sanitizeIdentifier(circuit.id || 'vfcs_circuit');
 
   const inputNodes = circuit.nodes.filter((node) => node.nodeType === 'INPUT' || node.nodeType === 'CLOCK');
-  const outputNodes = circuit.nodes.filter((node) => node.nodeType === 'OUTPUT');
+  const outputNodes = circuit.nodes.filter((node) => node.nodeType === 'OUTPUT' || node.nodeType === 'LED');
 
   const ports = [
     ...inputNodes.map((node) => inputSignalForNode(node)),
@@ -212,7 +212,7 @@ export function exportCircuitAsVerilog(circuit: CircuitDefinition): VerilogExpor
       continue;
     }
 
-    if (node.nodeType === 'INPUT' || node.nodeType === 'OUTPUT' || node.nodeType === 'CLOCK') {
+    if (node.nodeType === 'INPUT' || node.nodeType === 'OUTPUT' || node.nodeType === 'LED' || node.nodeType === 'CLOCK') {
       continue;
     }
 
