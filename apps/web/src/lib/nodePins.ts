@@ -129,8 +129,18 @@ export function nodeSymbol(node: NodeInstance, chipLibrary: ChipDefinition[]): s
     NOR: 'NOR',
     XOR: 'XOR',
     XNOR: 'XNOR',
+    MUX2: 'MUX2',
+    MUX4: 'MUX4',
+    DEMUX2: 'DMX',
+    DECODER2TO4: 'DEC',
+    HALF_ADDER: 'HA',
+    FULL_ADDER: 'FA',
+    BUS_JOIN8: 'BUS+',
+    BUS_SPLIT8: 'BUS-',
+    BUS_PROBE8: 'BUS?',
     DFF: 'D',
     TFF: 'T',
+    REGISTER8: 'REG8',
   };
 
   return known[node.nodeType] ?? node.nodeType;

@@ -368,4 +368,120 @@ describe('SimulationEngine', () => {
     expect(outputValue(snapshot, 'out_hi')).toBe('1');
     expect(outputValue(snapshot, 'out_lo')).toBe('0');
   });
+
+  it('evaluates mux, decoder, and adder building blocks', () => {
+    const circuit: CircuitDefinition = {
+      id: 'building-blocks-demo',
+      name: 'Building Blocks Demo',
+      nodes: [
+        { id: 'vcc', nodeType: 'VCC', position: { x: 0, y: 0 } },
+        { id: 'gnd', nodeType: 'GND', position: { x: 0, y: 80 } },
+        { id: 'sel', nodeType: 'INPUT', position: { x: 0, y: 160 } },
+        { id: 'mux', nodeType: 'MUX2', position: { x: 160, y: 0 } },
+        { id: 'decoder', nodeType: 'DECODER2TO4', position: { x: 160, y: 120 } },
+        { id: 'adder', nodeType: 'FULL_ADDER', position: { x: 160, y: 240 } },
+      ],
+      wires: [
+        { id: 'w1', from: { nodeId: 'gnd', pinId: 'OUT' }, to: { nodeId: 'mux', pinId: 'A' } },
+        { id: 'w2', from: { nodeId: 'vcc', pinId: 'OUT' }, to: { nodeId: 'mux', pinId: 'B' } },
+        { id: 'w3', from: { nodeId: 'sel', pinId: 'OUT' }, to: { nodeId: 'mux', pinId: 'SEL' } },
+        { id: 'w4', from: { nodeId: 'vcc', pinId: 'OUT' }, to: { nodeId: 'decoder', pinId: 'A0' } },
+        { id: 'w5', from: { nodeId: 'gnd', pinId: 'OUT' }, to: { nodeId: 'decoder', pinId: 'A1' } },
+        { id: 'w6', from: { nodeId: 'vcc', pinId: 'OUT' }, to: { nodeId: 'decoder', pinId: 'EN' } },
+        { id: 'w7', from: { nodeId: 'vcc', pinId: 'OUT' }, to: { nodeId: 'adder', pinId: 'A' } },
+        { id: 'w8', from: { nodeId: 'vcc', pinId: 'OUT' }, to: { nodeId: 'adder', pinId: 'B' } },
+        { id: 'w9', from: { nodeId: 'vcc', pinId: 'OUT' }, to: { nodeId: 'adder', pinId: 'CIN' } },
+      ],
+      nets: [],
+    };
+
+    const engine = new SimulationEngine(circuit);
+    engine.setInput('sel', '0');
+    let snapshot = engine.step();
+    expect(snapshot.nodeOutputs.mux.OUT).toBe('0');
+    expect(snapshot.nodeOutputs.decoder.Y1).toBe('1');
+    expect(snapshot.nodeOutputs.adder.SUM).toBe('1');
+    expect(snapshot.nodeOutputs.adder.COUT).toBe('1');
+
+    engine.setInput('sel', '1');
+    snapshot = engine.step();
+    expect(snapshot.nodeOutputs.mux.OUT).toBe('1');
+  });
+
+  it('passes 8-bit bus bits through join/split and captures probe hex', () => {
+    const wires = Array.from({ length: 8 }, (_, index) => ({
+      id: `w_in_${index}`,
+      from: { nodeId: index % 2 === 0 ? 'vcc' : 'gnd', pinId: 'OUT' },
+      to: { nodeId: 'join', pinId: `D${index}` },
+    })).concat(
+      Array.from({ length: 8 }, (_, index) => ({
+        id: `w_out_${index}`,
+        from: { nodeId: 'join', pinId: `Q${index}` },
+        to: { nodeId: 'probe', pinId: `D${index}` },
+      })),
+    );
+
+    const circuit: CircuitDefinition = {
+      id: 'bus-demo',
+      name: 'Bus Demo',
+      nodes: [
+        { id: 'vcc', nodeType: 'VCC', position: { x: 0, y: 0 } },
+        { id: 'gnd', nodeType: 'GND', position: { x: 0, y: 80 } },
+        { id: 'join', nodeType: 'BUS_JOIN8', position: { x: 160, y: 20 } },
+        { id: 'probe', nodeType: 'BUS_PROBE8', position: { x: 320, y: 20 } },
+      ],
+      wires,
+      nets: [],
+    };
+
+    const snapshot = new SimulationEngine(circuit).step();
+
+    expect(snapshot.nodeOutputs.join.Q0).toBe('1');
+    expect(snapshot.nodeOutputs.join.Q1).toBe('0');
+    expect(snapshot.nodeStates.probe.bits).toBe('10101010');
+    expect(snapshot.nodeStates.probe.hex).toBe('55');
+  });
+
+  it('loads and clears an 8-bit register on clock edges', () => {
+    const dataWires = Array.from({ length: 8 }, (_, index) => ({
+      id: `w_d_${index}`,
+      from: { nodeId: index === 0 ? 'vcc' : 'gnd', pinId: 'OUT' },
+      to: { nodeId: 'reg', pinId: `D${index}` },
+    }));
+
+    const circuit: CircuitDefinition = {
+      id: 'register-demo',
+      name: 'Register Demo',
+      nodes: [
+        { id: 'vcc', nodeType: 'VCC', position: { x: 0, y: 0 } },
+        { id: 'gnd', nodeType: 'GND', position: { x: 0, y: 80 } },
+        { id: 'clk', nodeType: 'INPUT', position: { x: 0, y: 160 } },
+        { id: 'load', nodeType: 'INPUT', position: { x: 0, y: 240 } },
+        { id: 'clr', nodeType: 'INPUT', position: { x: 0, y: 320 } },
+        { id: 'reg', nodeType: 'REGISTER8', position: { x: 180, y: 120 } },
+      ],
+      wires: [
+        ...dataWires,
+        { id: 'w_clk', from: { nodeId: 'clk', pinId: 'OUT' }, to: { nodeId: 'reg', pinId: 'CLK' } },
+        { id: 'w_load', from: { nodeId: 'load', pinId: 'OUT' }, to: { nodeId: 'reg', pinId: 'LOAD' } },
+        { id: 'w_clr', from: { nodeId: 'clr', pinId: 'OUT' }, to: { nodeId: 'reg', pinId: 'CLR' } },
+      ],
+      nets: [],
+    };
+
+    const engine = new SimulationEngine(circuit);
+    engine.setInput('clk', '0');
+    engine.setInput('load', '1');
+    engine.setInput('clr', '0');
+    engine.step();
+    engine.setInput('clk', '1');
+    let snapshot = engine.step();
+
+    expect(snapshot.nodeOutputs.reg.Q0).toBe('1');
+    expect(snapshot.nodeOutputs.reg.Q1).toBe('0');
+
+    engine.setInput('clr', '1');
+    snapshot = engine.step();
+    expect(snapshot.nodeOutputs.reg.Q0).toBe('0');
+  });
 });

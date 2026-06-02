@@ -1,6 +1,6 @@
 import type { ChipDefinition, CircuitDefinition, LogicValue, NodeInstance, PinReference } from '@vfcs/circuit-model';
-import { LogicConstants, logicGateOutput, invert, resolveDrivers } from './logic.js';
-import { DEFAULT_NODE_LIBRARY, GATE_NODE_TYPES, SEQUENTIAL_NODE_TYPES } from './library.js';
+import { LogicConstants, logicAnd, logicGateOutput, logicOr, logicXor, invert, resolveDrivers } from './logic.js';
+import { COMBINATIONAL_NODE_TYPES, DEFAULT_NODE_LIBRARY, GATE_NODE_TYPES, SEQUENTIAL_NODE_TYPES } from './library.js';
 
 type PinValueMap = Record<string, LogicValue>;
 
@@ -48,8 +48,11 @@ export interface SimulationSnapshot {
 
 interface NodeRuntimeState {
   q?: LogicValue;
+  qBits?: LogicValue[];
   prevClk?: LogicValue;
   value?: LogicValue;
+  bits?: string;
+  hex?: string;
 }
 
 interface InboundEntry {
@@ -166,8 +169,11 @@ export class SimulationEngine {
 
       const runtimeState: NodeRuntimeState = {
         q: (baseState?.q as LogicValue | undefined) ?? '0',
+        qBits: this.normalizeBitArray(baseState?.qBits, 8),
         prevClk: (baseState?.prevClk as LogicValue | undefined) ?? '0',
         value: (baseState?.value as LogicValue | undefined) ?? '0',
+        bits: typeof baseState?.bits === 'string' ? baseState.bits : undefined,
+        hex: typeof baseState?.hex === 'string' ? baseState.hex : undefined,
       };
 
       this.states[node.id] = runtimeState;
@@ -185,6 +191,8 @@ export class SimulationEngine {
         this.outputs[node.id] = { Q: q, Q_BAR: invert(q) };
       } else if (node.nodeType === 'TFF') {
         this.outputs[node.id] = { Q: runtimeState.q ?? '0' };
+      } else if (node.nodeType === 'REGISTER8') {
+        this.outputs[node.id] = this.bitArrayToOutputMap(runtimeState.qBits ?? this.zeroBits(8), 'Q');
       } else if (node.nodeType === 'CHIP') {
         const chip = node.chipRefId ? this.chipById.get(node.chipRefId) : null;
         if (!chip) {
@@ -288,20 +296,17 @@ export class SimulationEngine {
   }
 
   private evaluateCombinational(): boolean {
-    const gateNodes = this.orderedNodes.filter((node) => GATE_NODE_TYPES.has(node.nodeType));
-    const maxIterations = Math.max(4, gateNodes.length * 2);
+    const combinationalNodes = this.orderedNodes.filter((node) => COMBINATIONAL_NODE_TYPES.has(node.nodeType));
+    const maxIterations = Math.max(4, combinationalNodes.length * 2);
 
     for (let pass = 0; pass < maxIterations; pass += 1) {
       let changed = false;
 
-      for (const node of gateNodes) {
-        const inputValues = this.readAllNodeInputs(node);
-        const gate = node.nodeType as 'NOT' | 'AND' | 'OR' | 'NAND' | 'NOR' | 'XOR' | 'XNOR';
-        const nextOut = logicGateOutput(gate, inputValues);
-
-        const currentOut = this.outputs[node.id]?.OUT;
-        if (currentOut !== nextOut) {
-          this.outputs[node.id] = { OUT: nextOut };
+      for (const node of combinationalNodes) {
+        const nextOutputs = this.evaluateCombinationalNode(node);
+        const currentOutputs = this.outputs[node.id] ?? {};
+        if (!this.pinMapsEqual(currentOutputs, nextOutputs)) {
+          this.outputs[node.id] = nextOutputs;
           changed = true;
         }
       }
@@ -312,6 +317,108 @@ export class SimulationEngine {
     }
 
     return false;
+  }
+
+  private evaluateCombinationalNode(node: NodeInstance): PinValueMap {
+    if (GATE_NODE_TYPES.has(node.nodeType)) {
+      const inputValues = this.readAllNodeInputs(node);
+      const gate = node.nodeType as 'NOT' | 'AND' | 'OR' | 'NAND' | 'NOR' | 'XOR' | 'XNOR';
+      return { OUT: logicGateOutput(gate, inputValues) };
+    }
+
+    if (node.nodeType === 'MUX2') {
+      const sel = this.readInput(node.id, 'SEL');
+      if (sel === '0') {
+        return { OUT: this.readInput(node.id, 'A') };
+      }
+      if (sel === '1') {
+        return { OUT: this.readInput(node.id, 'B') };
+      }
+      return { OUT: sel === 'ERR' ? 'ERR' : 'X' };
+    }
+
+    if (node.nodeType === 'MUX4') {
+      const s0 = this.readInput(node.id, 'S0');
+      const s1 = this.readInput(node.id, 'S1');
+      if (s0 === 'ERR' || s1 === 'ERR') {
+        return { OUT: 'ERR' };
+      }
+      if (!this.isBinary(s0) || !this.isBinary(s1)) {
+        return { OUT: 'X' };
+      }
+      const index = (s1 === '1' ? 2 : 0) + (s0 === '1' ? 1 : 0);
+      return { OUT: this.readInput(node.id, `I${index}`) };
+    }
+
+    if (node.nodeType === 'DEMUX2') {
+      const input = this.readInput(node.id, 'IN');
+      const sel = this.readInput(node.id, 'SEL');
+      if (sel === 'ERR') {
+        return { Y0: 'ERR', Y1: 'ERR' };
+      }
+      if (sel === '0') {
+        return { Y0: input, Y1: '0' };
+      }
+      if (sel === '1') {
+        return { Y0: '0', Y1: input };
+      }
+      return { Y0: 'X', Y1: 'X' };
+    }
+
+    if (node.nodeType === 'DECODER2TO4') {
+      const en = this.readInput(node.id, 'EN');
+      if (en === '0') {
+        return { Y0: '0', Y1: '0', Y2: '0', Y3: '0' };
+      }
+      if (en === 'ERR') {
+        return { Y0: 'ERR', Y1: 'ERR', Y2: 'ERR', Y3: 'ERR' };
+      }
+      if (en !== '1') {
+        return { Y0: 'X', Y1: 'X', Y2: 'X', Y3: 'X' };
+      }
+
+      const a0 = this.readInput(node.id, 'A0');
+      const a1 = this.readInput(node.id, 'A1');
+      if (a0 === 'ERR' || a1 === 'ERR') {
+        return { Y0: 'ERR', Y1: 'ERR', Y2: 'ERR', Y3: 'ERR' };
+      }
+      if (!this.isBinary(a0) || !this.isBinary(a1)) {
+        return { Y0: 'X', Y1: 'X', Y2: 'X', Y3: 'X' };
+      }
+
+      const active = (a1 === '1' ? 2 : 0) + (a0 === '1' ? 1 : 0);
+      return Object.fromEntries(
+        [0, 1, 2, 3].map((index) => [`Y${index}`, index === active ? '1' : '0']),
+      ) as PinValueMap;
+    }
+
+    if (node.nodeType === 'HALF_ADDER') {
+      const a = this.readInput(node.id, 'A');
+      const b = this.readInput(node.id, 'B');
+      return {
+        SUM: logicXor([a, b]),
+        CARRY: logicAnd([a, b]),
+      };
+    }
+
+    if (node.nodeType === 'FULL_ADDER') {
+      const a = this.readInput(node.id, 'A');
+      const b = this.readInput(node.id, 'B');
+      const cin = this.readInput(node.id, 'CIN');
+      const partial = logicXor([a, b]);
+      return {
+        SUM: logicXor([partial, cin]),
+        COUT: logicOr([logicAnd([a, b]), logicAnd([cin, partial])]),
+      };
+    }
+
+    if (node.nodeType === 'BUS_JOIN8' || node.nodeType === 'BUS_SPLIT8') {
+      return Object.fromEntries(
+        Array.from({ length: 8 }, (_, index) => [`Q${index}`, this.readInput(node.id, `D${index}`)]),
+      ) as PinValueMap;
+    }
+
+    return {};
   }
 
   private evaluateSequential(): void {
@@ -340,7 +447,26 @@ export class SimulationEngine {
         }
       }
 
+      let qBits = state.qBits ?? this.zeroBits(8);
+      if (node.nodeType === 'REGISTER8') {
+        const clr = this.readInput(node.id, 'CLR');
+        const load = this.readInput(node.id, 'LOAD');
+
+        if (clr === '1') {
+          qBits = this.zeroBits(8);
+        } else if (clr !== '0') {
+          qBits = this.unknownBits(8, clr === 'ERR' ? 'ERR' : 'X');
+        } else if (risingEdge) {
+          if (load === '1') {
+            qBits = Array.from({ length: 8 }, (_, index) => this.logicValueOrUnknown(this.readInput(node.id, `D${index}`)));
+          } else if (load !== '0') {
+            qBits = this.unknownBits(8, load === 'ERR' ? 'ERR' : 'X');
+          }
+        }
+      }
+
       state.q = q;
+      state.qBits = qBits;
       if (clk === '0' || clk === '1') {
         state.prevClk = clk;
       }
@@ -352,6 +478,10 @@ export class SimulationEngine {
 
       if (node.nodeType === 'TFF') {
         this.outputs[node.id] = { Q: q };
+      }
+
+      if (node.nodeType === 'REGISTER8') {
+        this.outputs[node.id] = this.bitArrayToOutputMap(qBits, 'Q');
       }
     }
   }
@@ -388,6 +518,16 @@ export class SimulationEngine {
 
   private captureOutputNodes(): void {
     for (const node of this.orderedNodes) {
+      if (node.nodeType === 'BUS_PROBE8') {
+        const bits = Array.from({ length: 8 }, (_, index) => this.readInput(node.id, `D${index}`));
+        this.states[node.id] = {
+          ...this.states[node.id],
+          bits: bits.join(''),
+          hex: this.bitsToHex(bits),
+        };
+        continue;
+      }
+
       if (node.nodeType !== 'OUTPUT' && node.nodeType !== 'LED') {
         continue;
       }
@@ -670,6 +810,56 @@ export class SimulationEngine {
     });
 
     return nextCircuit;
+  }
+
+  private pinMapsEqual(a: PinValueMap, b: PinValueMap): boolean {
+    const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+    for (const key of keys) {
+      if (a[key] !== b[key]) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  private isBinary(value: LogicValue): value is '0' | '1' {
+    return value === '0' || value === '1';
+  }
+
+  private zeroBits(count: number): LogicValue[] {
+    return Array.from({ length: count }, () => '0' as LogicValue);
+  }
+
+  private unknownBits(count: number, value: LogicValue = 'X'): LogicValue[] {
+    return Array.from({ length: count }, () => value);
+  }
+
+  private normalizeBitArray(value: unknown, count: number): LogicValue[] {
+    if (!Array.isArray(value)) {
+      return this.zeroBits(count);
+    }
+
+    return Array.from({ length: count }, (_, index) => this.logicValueOrUnknown(value[index] as LogicValue | undefined));
+  }
+
+  private logicValueOrUnknown(value: LogicValue | undefined): LogicValue {
+    return value === '0' || value === '1' || value === 'X' || value === 'Z' || value === 'ERR' ? value : 'X';
+  }
+
+  private bitArrayToOutputMap(bits: LogicValue[], prefix: string): PinValueMap {
+    return Object.fromEntries(bits.map((value, index) => [`${prefix}${index}`, value])) as PinValueMap;
+  }
+
+  private bitsToHex(bits: LogicValue[]): string {
+    if (bits.some((bit) => bit === 'ERR')) {
+      return 'ERR';
+    }
+    if (bits.some((bit) => bit !== '0' && bit !== '1')) {
+      return 'XX';
+    }
+
+    const value = bits.reduce((acc, bit, index) => acc + (bit === '1' ? 2 ** index : 0), 0);
+    return value.toString(16).toUpperCase().padStart(2, '0');
   }
 
   private addDiagnostic(diagnostic: SimulationDiagnostic): void {

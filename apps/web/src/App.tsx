@@ -1271,6 +1271,7 @@ export default function App() {
           selectedNodeId={selectedNodeId}
           selectedWireId={selectedWireId}
           nodeOutputs={snapshot.nodeOutputs}
+          nodeStates={snapshot.nodeStates}
           pendingWireSource={pendingWireSource}
           chipLibrary={chipLibrary}
           onStartWireFromPin={startWireFromPin}

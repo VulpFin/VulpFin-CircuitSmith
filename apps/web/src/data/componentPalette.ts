@@ -22,8 +22,18 @@ const ORDER = [
   'NOR',
   'XOR',
   'XNOR',
+  'MUX2',
+  'MUX4',
+  'DEMUX2',
+  'DECODER2TO4',
+  'HALF_ADDER',
+  'FULL_ADDER',
+  'BUS_JOIN8',
+  'BUS_SPLIT8',
+  'BUS_PROBE8',
   'DFF',
   'TFF',
+  'REGISTER8',
 ];
 
 const SYMBOL_BY_TYPE: Record<string, string> = {
@@ -41,8 +51,18 @@ const SYMBOL_BY_TYPE: Record<string, string> = {
   NOR: 'NOR',
   XOR: 'XOR',
   XNOR: 'XNOR',
+  MUX2: 'MUX2',
+  MUX4: 'MUX4',
+  DEMUX2: 'DMX',
+  DECODER2TO4: 'DEC',
+  HALF_ADDER: 'HA',
+  FULL_ADDER: 'FA',
+  BUS_JOIN8: 'BUS+',
+  BUS_SPLIT8: 'BUS-',
+  BUS_PROBE8: 'BUS?',
   DFF: 'D',
   TFF: 'T',
+  REGISTER8: 'REG8',
   CHIP: 'CHIP',
 };
 

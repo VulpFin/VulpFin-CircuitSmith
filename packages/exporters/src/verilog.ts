@@ -9,6 +9,29 @@ export interface VerilogExportResult {
 type GateType = 'NOT' | 'AND' | 'OR' | 'NAND' | 'NOR' | 'XOR' | 'XNOR';
 
 const GATE_TYPES = new Set<GateType>(['NOT', 'AND', 'OR', 'NAND', 'NOR', 'XOR', 'XNOR']);
+const SOURCE_TYPES = new Set(['INPUT', 'CLOCK', 'VCC', 'GND', 'VSS']);
+const SINK_TYPES = new Set(['OUTPUT', 'LED', 'BUS_PROBE8']);
+
+const OUTPUT_PINS_BY_TYPE: Record<string, string[]> = {
+  NOT: ['OUT'],
+  AND: ['OUT'],
+  OR: ['OUT'],
+  NAND: ['OUT'],
+  NOR: ['OUT'],
+  XOR: ['OUT'],
+  XNOR: ['OUT'],
+  MUX2: ['OUT'],
+  MUX4: ['OUT'],
+  DEMUX2: ['Y0', 'Y1'],
+  DECODER2TO4: ['Y0', 'Y1', 'Y2', 'Y3'],
+  HALF_ADDER: ['SUM', 'CARRY'],
+  FULL_ADDER: ['SUM', 'COUT'],
+  BUS_JOIN8: ['Q0', 'Q1', 'Q2', 'Q3', 'Q4', 'Q5', 'Q6', 'Q7'],
+  BUS_SPLIT8: ['Q0', 'Q1', 'Q2', 'Q3', 'Q4', 'Q5', 'Q6', 'Q7'],
+  DFF: ['Q', 'Q_BAR'],
+  TFF: ['Q'],
+  REGISTER8: ['Q0', 'Q1', 'Q2', 'Q3', 'Q4', 'Q5', 'Q6', 'Q7'],
+};
 
 function sanitizeIdentifier(raw: string): string {
   const clean = raw.replace(/[^a-zA-Z0-9_]/g, '_');
@@ -121,6 +144,64 @@ function renderGateAssign(node: NodeInstance, circuit: CircuitDefinition, warnin
   }
 }
 
+function renderBuildingBlockAssigns(node: NodeInstance, circuit: CircuitDefinition, warnings: string[]): string[] {
+  const out = (pinId: string) => nodePinSignal(node.id, pinId);
+  const input = (pinId: string, fallback = "1'bx") => resolveSingleDriver(circuit, node.id, pinId, warnings, fallback);
+
+  if (node.nodeType === 'MUX2') {
+    return [`assign ${out('OUT')} = (${input('SEL', "1'b0")}) ? ${input('B')} : ${input('A')};`];
+  }
+
+  if (node.nodeType === 'MUX4') {
+    const sel = `{${input('S1', "1'b0")}, ${input('S0', "1'b0")}}`;
+    return [
+      `assign ${out('OUT')} = (${sel} == 2'b00) ? ${input('I0')} :`,
+      `                    (${sel} == 2'b01) ? ${input('I1')} :`,
+      `                    (${sel} == 2'b10) ? ${input('I2')} : ${input('I3')};`,
+    ];
+  }
+
+  if (node.nodeType === 'DEMUX2') {
+    return [
+      `assign ${out('Y0')} = (${input('SEL', "1'b0")}) ? 1'b0 : ${input('IN')};`,
+      `assign ${out('Y1')} = (${input('SEL', "1'b0")}) ? ${input('IN')} : 1'b0;`,
+    ];
+  }
+
+  if (node.nodeType === 'DECODER2TO4') {
+    const en = input('EN', "1'b0");
+    const a0 = input('A0', "1'b0");
+    const a1 = input('A1', "1'b0");
+    return [0, 1, 2, 3].map((index) => {
+      const bit0 = index & 1 ? a0 : `~(${a0})`;
+      const bit1 = index & 2 ? a1 : `~(${a1})`;
+      return `assign ${out(`Y${index}`)} = (${en}) & (${bit0}) & (${bit1});`;
+    });
+  }
+
+  if (node.nodeType === 'HALF_ADDER') {
+    const a = input('A');
+    const b = input('B');
+    return [`assign ${out('SUM')} = (${a}) ^ (${b});`, `assign ${out('CARRY')} = (${a}) & (${b});`];
+  }
+
+  if (node.nodeType === 'FULL_ADDER') {
+    const a = input('A');
+    const b = input('B');
+    const cin = input('CIN', "1'b0");
+    return [
+      `assign ${out('SUM')} = (${a}) ^ (${b}) ^ (${cin});`,
+      `assign ${out('COUT')} = ((${a}) & (${b})) | ((${cin}) & ((${a}) ^ (${b})));`,
+    ];
+  }
+
+  if (node.nodeType === 'BUS_JOIN8' || node.nodeType === 'BUS_SPLIT8') {
+    return Array.from({ length: 8 }, (_, index) => `assign ${out(`Q${index}`)} = ${input(`D${index}`)};`);
+  }
+
+  return [];
+}
+
 function renderSequentialBlock(
   node: NodeInstance,
   circuit: CircuitDefinition,
@@ -148,6 +229,23 @@ function renderSequentialBlock(
     ];
   }
 
+  if (node.nodeType === 'REGISTER8') {
+    const clockSignal = resolveSingleDriver(circuit, node.id, 'CLK', warnings, "1'b0");
+    const loadSignal = resolveSingleDriver(circuit, node.id, 'LOAD', warnings, "1'b0");
+    const clearSignal = resolveSingleDriver(circuit, node.id, 'CLR', warnings, "1'b0");
+    const lines = [`always @(posedge ${clockSignal} or posedge ${clearSignal}) begin`, `  if (${clearSignal}) begin`];
+    for (let index = 0; index < 8; index += 1) {
+      lines.push(`    ${nodePinSignal(node.id, `Q${index}`)} <= 1'b0;`);
+    }
+    lines.push(`  end else if (${loadSignal}) begin`);
+    for (let index = 0; index < 8; index += 1) {
+      const dSignal = resolveSingleDriver(circuit, node.id, `D${index}`, warnings, "1'bx");
+      lines.push(`    ${nodePinSignal(node.id, `Q${index}`)} <= ${dSignal};`);
+    }
+    lines.push('  end', 'end');
+    return lines;
+  }
+
   return [];
 }
 
@@ -167,17 +265,23 @@ export function exportCircuitAsVerilog(circuit: CircuitDefinition): VerilogExpor
   const wireSignals: string[] = [];
 
   for (const node of circuit.nodes) {
-    if (GATE_TYPES.has(node.nodeType as GateType)) {
-      wireSignals.push(nodePinSignal(node.id, 'OUT'));
+    if (SOURCE_TYPES.has(node.nodeType) || SINK_TYPES.has(node.nodeType)) {
+      continue;
     }
 
-    if (node.nodeType === 'DFF') {
-      regSignals.push(nodePinSignal(node.id, 'Q'));
-      wireSignals.push(nodePinSignal(node.id, 'Q_BAR'));
+    const outputPins = OUTPUT_PINS_BY_TYPE[node.nodeType] ?? [];
+    if (outputPins.length === 0) {
+      continue;
     }
 
-    if (node.nodeType === 'TFF') {
-      regSignals.push(nodePinSignal(node.id, 'Q'));
+    for (const pinId of outputPins) {
+      if (node.nodeType === 'DFF' && pinId === 'Q') {
+        regSignals.push(nodePinSignal(node.id, pinId));
+      } else if (node.nodeType === 'TFF' || node.nodeType === 'REGISTER8') {
+        regSignals.push(nodePinSignal(node.id, pinId));
+      } else {
+        wireSignals.push(nodePinSignal(node.id, pinId));
+      }
     }
   }
 
@@ -218,6 +322,17 @@ export function exportCircuitAsVerilog(circuit: CircuitDefinition): VerilogExpor
       continue;
     }
 
+    if (node.nodeType === 'REGISTER8') {
+      lines.push(...renderSequentialBlock(node, circuit, warnings));
+      continue;
+    }
+
+    const buildingBlockLines = renderBuildingBlockAssigns(node, circuit, warnings);
+    if (buildingBlockLines.length > 0) {
+      lines.push(...buildingBlockLines);
+      continue;
+    }
+
     if (
       node.nodeType === 'INPUT'
       || node.nodeType === 'OUTPUT'
@@ -226,6 +341,7 @@ export function exportCircuitAsVerilog(circuit: CircuitDefinition): VerilogExpor
       || node.nodeType === 'VCC'
       || node.nodeType === 'GND'
       || node.nodeType === 'VSS'
+      || node.nodeType === 'BUS_PROBE8'
     ) {
       continue;
     }

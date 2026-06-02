@@ -12,6 +12,7 @@ interface InspectorPanelProps {
   selectedNodeId: string | null;
   selectedWireId: string | null;
   nodeOutputs: Record<string, Record<string, LogicValue>>;
+  nodeStates: Record<string, Record<string, unknown>>;
   pendingWireSource: PendingWireSource | null;
   chipLibrary: ChipDefinition[];
   onStartWireFromPin: (source: PendingWireSource) => void;
@@ -45,6 +46,7 @@ export function InspectorPanel({
   selectedNodeId,
   selectedWireId,
   nodeOutputs,
+  nodeStates,
   pendingWireSource,
   chipLibrary,
   onStartWireFromPin,
@@ -82,6 +84,7 @@ export function InspectorPanel({
   }
 
   const outputs = node ? nodeOutputs[node.id] ?? {} : {};
+  const state = node ? nodeStates[node.id] ?? {} : {};
   const mappings = node ? getMappingsForLogicalType(node.nodeType) : [];
   const pinInfo = node ? resolveNodePins(node, chipLibrary) : { inputPins: [], outputPins: [] };
   const chipPinLayout = node ? resolveChipPinLayout(node, chipLibrary) : {};
@@ -182,6 +185,12 @@ export function InspectorPanel({
                   ))
                 )}
               </ul>
+              {node.nodeType === 'BUS_PROBE8' ? (
+                <div className="mt-2 rounded border border-panelBorder/70 bg-[#031a30] p-2 text-xs text-slate-300">
+                  <div>Bits: {String(state.bits ?? 'ZZZZZZZZ')}</div>
+                  <div>Hex: {String(state.hex ?? 'XX')}</div>
+                </div>
+              ) : null}
             </div>
 
             {node.nodeType === 'INPUT' ? (

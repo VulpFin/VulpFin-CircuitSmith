@@ -111,6 +111,11 @@ function outputSignalForNode(
     return stateValue ?? 'X';
   }
 
+  if (nodeType === 'BUS_PROBE8') {
+    const bits = nodeStates[nodeId]?.bits;
+    return typeof bits === 'string' && bits.includes('1') ? '1' : '0';
+  }
+
   for (const pinId of outputPinIds) {
     const value = nodeOutputs[nodeId]?.[pinId];
     if (value) {
@@ -350,6 +355,13 @@ export function WorkspaceCanvas({
                   <div className="mt-2 text-xs text-slate-300">OUT: {firstSignal}</div>
                 ) : null}
 
+                {node.nodeType === 'BUS_PROBE8' ? (
+                  <div className="mt-2 space-y-1 text-xs text-slate-300">
+                    <div>Bits: {String(nodeStates[node.id]?.bits ?? 'ZZZZZZZZ')}</div>
+                    <div>Hex: {String(nodeStates[node.id]?.hex ?? 'XX')}</div>
+                  </div>
+                ) : null}
+
                 {node.nodeType === 'CLOCK' ? (
                   <div className="mt-2 space-y-1 text-xs text-slate-300">
                     <div>Freq: {Number(node.parameters?.frequencyHz ?? 1).toLocaleString()} Hz</div>
@@ -360,7 +372,10 @@ export function WorkspaceCanvas({
                   </div>
                 ) : null}
 
-                {node.nodeType !== 'OUTPUT' && node.nodeType !== 'LED' && node.nodeType !== 'CLOCK' ? (
+                {node.nodeType !== 'OUTPUT'
+                && node.nodeType !== 'LED'
+                && node.nodeType !== 'CLOCK'
+                && node.nodeType !== 'BUS_PROBE8' ? (
                   <div className="mt-1 text-xs text-slate-300">Signal: {firstSignal}</div>
                 ) : null}
 
