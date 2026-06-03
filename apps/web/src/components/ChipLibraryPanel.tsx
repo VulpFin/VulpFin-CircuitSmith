@@ -35,6 +35,7 @@ interface ChipLibraryPanelProps {
   chipLibrary: ChipDefinition[];
   chipPinDrafts: ChipPinDraft[];
   chipPinSourceOptions: ChipPinSourceOption[];
+  chipDesignerWarning: string | null;
   chipAppearanceDraft: ChipAppearanceDraft;
   onChipIdDraftChange: (value: string) => void;
   onChipNameDraftChange: (value: string) => void;
@@ -83,6 +84,18 @@ function formatSourceOption(source: ChipPinSourceOption): string {
   return `${source.label} (${source.id}, ${source.nodeType})`;
 }
 
+function sourcePriority(source: ChipPinSourceOption, direction: PinDirection): number {
+  if (direction === 'input') {
+    return source.direction === 'input' ? 0 : 1;
+  }
+
+  if (direction === 'output') {
+    return source.direction === 'output' ? 0 : 1;
+  }
+
+  return source.direction === 'bidirectional' ? 0 : source.direction === 'input' ? 1 : 2;
+}
+
 export function ChipLibraryPanel({
   chipIdDraft,
   chipNameDraft,
@@ -90,6 +103,7 @@ export function ChipLibraryPanel({
   chipLibrary,
   chipPinDrafts,
   chipPinSourceOptions,
+  chipDesignerWarning,
   chipAppearanceDraft,
   onChipIdDraftChange,
   onChipNameDraftChange,
@@ -161,6 +175,11 @@ export function ChipLibraryPanel({
           Editing existing chip: {editingChipId}
         </p>
       ) : null}
+      {chipDesignerWarning ? (
+        <p className="mb-3 rounded border border-[#7a4a20] bg-[#2d1b0d] px-2 py-1 text-xs text-[#ffd28a]">
+          {chipDesignerWarning}
+        </p>
+      ) : null}
 
       <div className="grid gap-2 md:grid-cols-2">
         <label className="text-xs uppercase tracking-[0.12em] text-accentSoft">
@@ -204,9 +223,14 @@ export function ChipLibraryPanel({
             ) : null}
             {chipPinDrafts.map((draft) => {
               const selectedSource = draft.sourceNodeId ? sourceById.get(draft.sourceNodeId) : undefined;
-              const compatibleSources = chipPinSourceOptions.filter((source) =>
-                isSourceCompatible(source, draft.direction),
-              );
+              const compatibleSources = chipPinSourceOptions
+                .filter((source) => isSourceCompatible(source, draft.direction))
+                .sort(
+                  (a, b) =>
+                    sourcePriority(a, draft.direction) - sourcePriority(b, draft.direction)
+                    || a.label.localeCompare(b.label)
+                    || a.id.localeCompare(b.id),
+                );
               const hasInvalidSource = Boolean(draft.sourceNodeId && !selectedSource);
               const hasIncompatibleSource = Boolean(selectedSource && !isSourceCompatible(selectedSource, draft.direction));
 

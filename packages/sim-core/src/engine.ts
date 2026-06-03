@@ -25,7 +25,8 @@ export type SimulationDiagnosticCode =
   | 'floating-input'
   | 'conflicting-drivers'
   | 'missing-node-definition'
-  | 'combinational-not-stable';
+  | 'combinational-not-stable'
+  | 'recursive-chip-definition';
 
 export interface SimulationDiagnostic {
   code: SimulationDiagnosticCode;
@@ -622,6 +623,19 @@ export class SimulationEngine {
         severity: 'error',
         nodeId: node.id,
         message: `No chip definition was found for ${node.chipRefId ?? '(missing chipRefId)'}.`,
+      });
+      return null;
+    }
+
+    const recursiveNode = chip.internalCircuit.nodes.find(
+      (entry) => entry.nodeType === 'CHIP' && entry.chipRefId === chip.id,
+    );
+    if (recursiveNode) {
+      this.addDiagnostic({
+        code: 'recursive-chip-definition',
+        severity: 'error',
+        nodeId: node.id,
+        message: `Chip ${chip.id} contains itself as internal node ${recursiveNode.id}; rebuild the chip from its real internal circuit.`,
       });
       return null;
     }

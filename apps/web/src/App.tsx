@@ -311,6 +311,19 @@ function buildChipPinSourceOptions(circuit: CircuitDefinition): ChipPinSourceOpt
     }));
 }
 
+function findSelfReferencingChipNodes(circuit: CircuitDefinition, chipId: string): NodeInstance[] {
+  return circuit.nodes.filter((node) => node.nodeType === 'CHIP' && node.chipRefId === chipId);
+}
+
+function describeSelfReferencingChip(circuit: CircuitDefinition, chipId: string): string | null {
+  const recursiveNodes = findSelfReferencingChipNodes(circuit, chipId);
+  if (recursiveNodes.length === 0) {
+    return null;
+  }
+
+  return `Chip ${chipId} contains itself as internal node ${recursiveNodes.map((node) => node.id).join(', ')}. Rebuild it from the real internal circuit before saving.`;
+}
+
 export default function App() {
   const [circuit, setCircuit] = useState<CircuitDefinition>(initialCircuit);
   const [workspaceSize, setWorkspaceSize] = useState<WorkspaceSize>({
@@ -350,10 +363,18 @@ export default function App() {
     };
   }, [circuit, nodePositions]);
 
-  const chipPinSourceOptions = useMemo(
-    () => buildChipPinSourceOptions(displayCircuit),
-    [displayCircuit],
+  const editingChip = useMemo(
+    () => chipLibrary.find((entry) => entry.id === editingChipId) ?? null,
+    [chipLibrary, editingChipId],
   );
+  const designerSourceCircuit = editingChip?.internalCircuit ?? displayCircuit;
+  const chipPinSourceOptions = useMemo(
+    () => buildChipPinSourceOptions(designerSourceCircuit),
+    [designerSourceCircuit],
+  );
+  const chipDesignerWarning = editingChipId
+    ? describeSelfReferencingChip(designerSourceCircuit, editingChipId)
+    : null;
 
   const ledSignal = useMemo<LogicValue>(() => {
     const outputNode = displayCircuit.nodes.find((node) => node.nodeType === 'LED')
@@ -517,6 +538,7 @@ export default function App() {
         target
         && (target.tagName === 'INPUT'
           || target.tagName === 'TEXTAREA'
+          || target.tagName === 'SELECT'
           || target.isContentEditable)
       ) {
         return;
@@ -533,6 +555,41 @@ export default function App() {
       if (mod && event.key.toLowerCase() === 'v') {
         event.preventDefault();
         pasteClipboardNode();
+        return;
+      }
+
+      const arrowDeltas: Record<string, Position> = {
+        ArrowLeft: { x: -1, y: 0 },
+        ArrowRight: { x: 1, y: 0 },
+        ArrowUp: { x: 0, y: -1 },
+        ArrowDown: { x: 0, y: 1 },
+      };
+      const arrowDelta = arrowDeltas[event.key];
+      if (!mod && arrowDelta && selectedNodeId) {
+        const node = displayCircuit.nodes.find((entry) => entry.id === selectedNodeId);
+        if (!node) {
+          return;
+        }
+
+        event.preventDefault();
+        const stepSize = event.shiftKey ? 10 : 1;
+        const size = nodeSize(node);
+        const basePosition = nodePositions[selectedNodeId] ?? node.position;
+        const nextPosition = clampNodeToWorkspaceWithSize(
+          {
+            x: basePosition.x + arrowDelta.x * stepSize,
+            y: basePosition.y + arrowDelta.y * stepSize,
+          },
+          workspaceSize,
+          size,
+        );
+        setNodePositions((previous) => ({
+          ...previous,
+          [selectedNodeId]: nextPosition,
+        }));
+        setStatusMessage(
+          `Nudged ${selectedNodeId} to ${nextPosition.x}, ${nextPosition.y}${event.shiftKey ? ' (10px)' : ' (1px)'}.`,
+        );
         return;
       }
 
@@ -770,14 +827,6 @@ export default function App() {
       return;
     }
 
-    const existingWire = circuit.wires.find(
-      (wire) => wire.to.nodeId === targetNodeId && wire.to.pinId === targetPin.id,
-    );
-    if (existingWire) {
-      setStatusMessage(`Pin ${targetNodeId}.${targetPin.id} is already connected. Remove that wire first.`);
-      return;
-    }
-
     setCircuit((previous) => {
       const wireId = createWireId(previous);
       const next = cloneCircuit(previous);
@@ -862,17 +911,6 @@ export default function App() {
     const targetPins = resolveNodePins(targetNode, chipLibrary).inputPins;
     if (!targetPins.some((pin) => pin.id === targetPinId)) {
       setStatusMessage(`Pin ${targetPinId} is not a valid input pin on ${targetNode.id}.`);
-      return;
-    }
-
-    const occupied = circuit.wires.find(
-      (entry) =>
-        entry.id !== wireId
-        && entry.to.nodeId === wire.to.nodeId
-        && entry.to.pinId === targetPinId,
-    );
-    if (occupied) {
-      setStatusMessage(`Pin ${wire.to.nodeId}.${targetPinId} is already connected.`);
       return;
     }
 
@@ -970,7 +1008,7 @@ export default function App() {
       symbol: typeof appearance.symbol === 'string' ? appearance.symbol : DEFAULT_CHIP_APPEARANCE.symbol,
     });
     setEditingChipId(chip.id);
-    setStatusMessage(`Loaded ${chip.name} for editing in chip designer.`);
+    setStatusMessage(describeSelfReferencingChip(chip.internalCircuit, chip.id) ?? `Loaded ${chip.name} for editing in chip designer.`);
   };
 
   const importChipJson = (payload: string) => {
@@ -978,6 +1016,7 @@ export default function App() {
       const parsed = JSON.parse(payload) as unknown;
       const candidates = Array.isArray(parsed) ? parsed : [parsed];
       const incoming: ChipDefinition[] = [];
+      const skippedRecursive: string[] = [];
 
       for (const candidate of candidates) {
         if (typeof candidate !== 'object' || candidate === null) {
@@ -988,11 +1027,19 @@ export default function App() {
         if (!chip.id || !chip.name || !Array.isArray(chip.publicPins) || !chip.internalCircuit) {
           continue;
         }
+        if (findSelfReferencingChipNodes(chip.internalCircuit, chip.id).length > 0) {
+          skippedRecursive.push(chip.name);
+          continue;
+        }
         incoming.push(chip);
       }
 
       if (incoming.length === 0) {
-        setStatusMessage('No valid chip definitions were found in the import payload.');
+        setStatusMessage(
+          skippedRecursive.length > 0
+            ? `Skipped ${skippedRecursive.join(', ')}: chip JSON contains an instance of itself.`
+            : 'No valid chip definitions were found in the import payload.',
+        );
         return;
       }
 
@@ -1003,7 +1050,11 @@ export default function App() {
         }
         return [...byId.values()];
       });
-      setStatusMessage(`Imported ${incoming.length} chip definition(s).`);
+      setStatusMessage(
+        `Imported ${incoming.length} chip definition(s).${
+          skippedRecursive.length > 0 ? ` Skipped recursive chip(s): ${skippedRecursive.join(', ')}.` : ''
+        }`,
+      );
     } catch {
       setStatusMessage('Chip import failed: invalid JSON payload.');
     }
@@ -1045,6 +1096,12 @@ export default function App() {
       return;
     }
 
+    const selfReferenceWarning = describeSelfReferencingChip(designerSourceCircuit, chipId);
+    if (selfReferenceWarning) {
+      setStatusMessage(selfReferenceWarning);
+      return;
+    }
+
     const chipAppearance: ChipAppearance = {
       shape: chipAppearanceDraft.shape,
       bodyColor: chipAppearanceDraft.bodyColor,
@@ -1054,7 +1111,7 @@ export default function App() {
     };
 
     const chip = createChipDefinitionFromCircuit({
-      sourceCircuit: displayCircuit,
+      sourceCircuit: designerSourceCircuit,
       chipId,
       chipName: chipNameDraft.trim(),
       publicPins: built.publicPins,
@@ -1248,7 +1305,7 @@ export default function App() {
             : 'Wire mode inactive'}
         </span>
         <span className="rounded border border-panelBorder px-2 py-1 text-slate-300">
-          Keys: Del deletes selected, Ctrl/Cmd+C copy node, Ctrl/Cmd+V paste node
+          Keys: arrows nudge selected 1px, Shift+arrows nudge 10px, Del deletes selected, Ctrl/Cmd+C copy node, Ctrl/Cmd+V paste node
         </span>
 
         <label className="rounded border border-panelBorder px-2 py-1 text-slate-300">
@@ -1349,6 +1406,7 @@ export default function App() {
         chipLibrary={chipLibrary}
         chipPinDrafts={chipPinDrafts}
         chipPinSourceOptions={chipPinSourceOptions}
+        chipDesignerWarning={chipDesignerWarning}
         chipAppearanceDraft={chipAppearanceDraft}
         onChipIdDraftChange={(value) => {
           setChipIdDraft(value);

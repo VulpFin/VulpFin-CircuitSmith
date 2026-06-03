@@ -176,6 +176,31 @@ describe('SimulationEngine', () => {
     expect(outputValue(snapshot, 'out')).toBe('ERR');
   });
 
+  it('accepts matching multiple drivers on the same input pin', () => {
+    const circuit: CircuitDefinition = {
+      id: 'shared-driver-demo',
+      name: 'Shared Driver Demo',
+      nodes: [
+        { id: 'a', nodeType: 'INPUT', position: { x: 0, y: 0 } },
+        { id: 'b', nodeType: 'INPUT', position: { x: 0, y: 80 } },
+        { id: 'out', nodeType: 'OUTPUT', position: { x: 180, y: 40 } },
+      ],
+      wires: [
+        { id: 'w1', from: { nodeId: 'a', pinId: 'OUT' }, to: { nodeId: 'out', pinId: 'IN' } },
+        { id: 'w2', from: { nodeId: 'b', pinId: 'OUT' }, to: { nodeId: 'out', pinId: 'IN' } },
+      ],
+      nets: [],
+    };
+
+    const engine = new SimulationEngine(circuit);
+    engine.setInput('a', '1');
+    engine.setInput('b', '1');
+    const snapshot = engine.step();
+
+    expect(snapshot.diagnostics.some((item) => item.code === 'conflicting-drivers')).toBe(false);
+    expect(outputValue(snapshot, 'out')).toBe('1');
+  });
+
   it('supports configurable clock frequency parameter mapping', () => {
     const circuit: CircuitDefinition = {
       id: 'clock-param-demo',
@@ -278,6 +303,55 @@ describe('SimulationEngine', () => {
     engine.setInput('b', '0');
     snapshot = engine.step();
     expect(outputValue(snapshot, 'led')).toBe('0');
+  });
+
+  it('diagnoses a chip definition that contains itself', () => {
+    const circuit: CircuitDefinition = {
+      id: 'recursive-chip-top',
+      name: 'Recursive Chip Top',
+      nodes: [
+        { id: 'src', nodeType: 'INPUT', position: { x: 0, y: 0 } },
+        { id: 'chip1', nodeType: 'CHIP', chipRefId: 'loop_chip', position: { x: 140, y: 0 } },
+        { id: 'out', nodeType: 'OUTPUT', position: { x: 280, y: 0 } },
+      ],
+      wires: [
+        { id: 'w1', from: { nodeId: 'src', pinId: 'OUT' }, to: { nodeId: 'chip1', pinId: 'A' } },
+        { id: 'w2', from: { nodeId: 'chip1', pinId: 'Y' }, to: { nodeId: 'out', pinId: 'IN' } },
+      ],
+      nets: [],
+    };
+
+    const engine = new SimulationEngine(circuit, {
+      chipLibrary: [
+        {
+          id: 'loop_chip',
+          name: 'Loop Chip',
+          version: '0.1.0',
+          publicPins: [
+            { id: 'A', name: 'A', direction: 'input' },
+            { id: 'Y', name: 'Y', direction: 'output' },
+          ],
+          internalCircuit: {
+            id: 'loop-chip-internals',
+            name: 'Loop Chip Internals',
+            nodes: [
+              {
+                id: 'self',
+                nodeType: 'CHIP',
+                chipRefId: 'loop_chip',
+                position: { x: 0, y: 0 },
+              },
+            ],
+            wires: [],
+            nets: [],
+          },
+        },
+      ],
+    });
+
+    const snapshot = engine.step();
+
+    expect(snapshot.diagnostics.some((item) => item.code === 'recursive-chip-definition')).toBe(true);
   });
 
   it('captures LED node state as output sink', () => {
