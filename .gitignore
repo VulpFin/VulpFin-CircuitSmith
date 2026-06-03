@@ -6,3 +6,4 @@ coverage
 *.log
 *.code-workspace
 initial.md
+tools/ungoogled-chromium/

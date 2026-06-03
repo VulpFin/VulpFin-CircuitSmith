@@ -1,6 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ChipDefinition, PinDirection } from '@vfcs/circuit-model';
 import { sanitizePinPercent } from '../lib/chipDesigner.js';
+
+export interface ChipPinSourceOption {
+  id: string;
+  label: string;
+  nodeType: string;
+  direction: PinDirection;
+}
 
 export interface ChipPinDraft {
   draftId: string;
@@ -27,6 +34,7 @@ interface ChipLibraryPanelProps {
   editingChipId: string | null;
   chipLibrary: ChipDefinition[];
   chipPinDrafts: ChipPinDraft[];
+  chipPinSourceOptions: ChipPinSourceOption[];
   chipAppearanceDraft: ChipAppearanceDraft;
   onChipIdDraftChange: (value: string) => void;
   onChipNameDraftChange: (value: string) => void;
@@ -34,6 +42,7 @@ interface ChipLibraryPanelProps {
   onAddChipPinDraft: () => void;
   onRemoveChipPinDraft: (draftId: string) => void;
   onChipAppearanceDraftChange: (patch: Partial<ChipAppearanceDraft>) => void;
+  onStartNewChip: () => void;
   onCreateChip: () => void;
   onClearLibrary: () => void;
   onAddChipToWorkspace: (chipId: string) => void;
@@ -58,12 +67,29 @@ function draftPoint(draft: ChipPinDraft): { x: number; y: number } {
   };
 }
 
+function isSourceCompatible(source: ChipPinSourceOption | undefined, direction: PinDirection): boolean {
+  if (!source) {
+    return false;
+  }
+
+  if (direction === 'bidirectional' || direction === 'output') {
+    return true;
+  }
+
+  return source.direction === 'input' || source.direction === 'bidirectional';
+}
+
+function formatSourceOption(source: ChipPinSourceOption): string {
+  return `${source.label} (${source.id}, ${source.nodeType})`;
+}
+
 export function ChipLibraryPanel({
   chipIdDraft,
   chipNameDraft,
   editingChipId,
   chipLibrary,
   chipPinDrafts,
+  chipPinSourceOptions,
   chipAppearanceDraft,
   onChipIdDraftChange,
   onChipNameDraftChange,
@@ -71,6 +97,7 @@ export function ChipLibraryPanel({
   onAddChipPinDraft,
   onRemoveChipPinDraft,
   onChipAppearanceDraftChange,
+  onStartNewChip,
   onCreateChip,
   onClearLibrary,
   onAddChipToWorkspace,
@@ -118,6 +145,10 @@ export function ChipLibraryPanel({
   }, [dragState, onChipPinDraftChange]);
 
   const enabledDrafts = chipPinDrafts.filter((draft) => draft.enabled);
+  const sourceById = useMemo(
+    () => new Map(chipPinSourceOptions.map((source) => [source.id, source])),
+    [chipPinSourceOptions],
+  );
 
   return (
     <section className="rounded-xl border border-panelBorder bg-panel/80 p-4 shadow-panelGlow backdrop-blur-sm">
@@ -137,6 +168,7 @@ export function ChipLibraryPanel({
           <input
             value={chipIdDraft}
             onChange={(event) => onChipIdDraftChange(event.target.value)}
+            placeholder="chip_my_design"
             className="mt-1 w-full rounded border border-panelBorder bg-[#031a30] px-2 py-1 text-sm text-slate-100 outline-none focus:border-accent"
           />
         </label>
@@ -146,6 +178,7 @@ export function ChipLibraryPanel({
           <input
             value={chipNameDraft}
             onChange={(event) => onChipNameDraftChange(event.target.value)}
+            placeholder="My Custom Chip"
             className="mt-1 w-full rounded border border-panelBorder bg-[#031a30] px-2 py-1 text-sm text-slate-100 outline-none focus:border-accent"
           />
         </label>
@@ -164,57 +197,119 @@ export function ChipLibraryPanel({
             </button>
           </div>
           <div className="space-y-2">
-            {chipPinDrafts.map((draft) => (
-              <div
-                key={draft.draftId}
-                className="grid gap-2 rounded border border-panelBorder/60 p-2 sm:grid-cols-[auto_1fr_1fr_auto_auto] sm:items-center"
-              >
-                <input
-                  type="checkbox"
-                  checked={draft.enabled}
-                  onChange={(event) => onChipPinDraftChange(draft.draftId, { enabled: event.target.checked })}
-                  className="justify-self-start"
-                />
-                <input
-                  value={draft.id}
-                  onChange={(event) => onChipPinDraftChange(draft.draftId, { id: event.target.value })}
-                  className="rounded border border-panelBorder bg-[#031a30] px-2 py-1 text-xs text-slate-100 outline-none focus:border-accent"
-                  placeholder="PIN_ID"
-                />
-                <input
-                  value={draft.name}
-                  onChange={(event) => onChipPinDraftChange(draft.draftId, { name: event.target.value })}
-                  className="rounded border border-panelBorder bg-[#031a30] px-2 py-1 text-xs text-slate-100 outline-none focus:border-accent"
-                  placeholder="Pin name"
-                />
-                <select
-                  value={draft.direction}
-                  onChange={(event) =>
-                    onChipPinDraftChange(draft.draftId, {
-                      direction: event.target.value as PinDirection,
-                    })
-                  }
-                  className="rounded border border-panelBorder bg-[#031a30] px-2 py-1 text-xs text-slate-100 outline-none focus:border-accent"
-                >
-                  <option value="input">IN</option>
-                  <option value="output">OUT</option>
-                  <option value="bidirectional">BIDI</option>
-                </select>
-                <button
-                  type="button"
-                  onClick={() => onRemoveChipPinDraft(draft.draftId)}
-                  className="rounded border border-[#6e2e2e] bg-[#301111] px-2 py-1 text-[10px] uppercase tracking-[0.1em] text-[#ffb5b5] sm:justify-self-end"
-                >
-                  X
-                </button>
-                <div className="flex flex-wrap items-center justify-between gap-1 text-[10px] uppercase tracking-[0.12em] text-slate-400 sm:col-span-5">
-                  <span>{draft.sourceNodeId ? `Source: ${draft.sourceNodeId}` : 'Custom pin'}</span>
-                  <span>
-                    Pos: {Math.round(clampPercent(draft.pinX ?? 50))}, {Math.round(clampPercent(draft.pinY ?? 50))}
-                  </span>
+            {chipPinDrafts.length === 0 ? (
+              <p className="rounded border border-panelBorder/60 bg-[#031a30] px-3 py-2 text-xs text-slate-300">
+                No public pins yet. Add pins manually, or use Reset Designer to pull available inputs/outputs from the workspace.
+              </p>
+            ) : null}
+            {chipPinDrafts.map((draft) => {
+              const selectedSource = draft.sourceNodeId ? sourceById.get(draft.sourceNodeId) : undefined;
+              const compatibleSources = chipPinSourceOptions.filter((source) =>
+                isSourceCompatible(source, draft.direction),
+              );
+              const hasInvalidSource = Boolean(draft.sourceNodeId && !selectedSource);
+              const hasIncompatibleSource = Boolean(selectedSource && !isSourceCompatible(selectedSource, draft.direction));
+
+              return (
+                <div key={draft.draftId} className="rounded border border-panelBorder/60 p-2">
+                  <div className="grid gap-2 sm:grid-cols-[auto_1fr_1fr_auto_auto] sm:items-center">
+                    <input
+                      type="checkbox"
+                      checked={draft.enabled}
+                      onChange={(event) => onChipPinDraftChange(draft.draftId, { enabled: event.target.checked })}
+                      className="justify-self-start"
+                    />
+                    <input
+                      value={draft.id}
+                      onChange={(event) => onChipPinDraftChange(draft.draftId, { id: event.target.value })}
+                      className="rounded border border-panelBorder bg-[#031a30] px-2 py-1 text-xs text-slate-100 outline-none focus:border-accent"
+                      placeholder="PIN_ID"
+                    />
+                    <input
+                      value={draft.name}
+                      onChange={(event) => onChipPinDraftChange(draft.draftId, { name: event.target.value })}
+                      className="rounded border border-panelBorder bg-[#031a30] px-2 py-1 text-xs text-slate-100 outline-none focus:border-accent"
+                      placeholder="Pin name"
+                    />
+                    <select
+                      value={draft.direction}
+                      onChange={(event) => {
+                        const direction = event.target.value as PinDirection;
+                        const source = draft.sourceNodeId ? sourceById.get(draft.sourceNodeId) : undefined;
+                        onChipPinDraftChange(draft.draftId, {
+                          direction,
+                          sourceNodeId: isSourceCompatible(source, direction) ? draft.sourceNodeId : undefined,
+                        });
+                      }}
+                      className="rounded border border-panelBorder bg-[#031a30] px-2 py-1 text-xs text-slate-100 outline-none focus:border-accent"
+                    >
+                      <option value="input">IN</option>
+                      <option value="output">OUT</option>
+                      <option value="bidirectional">BIDI</option>
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => onRemoveChipPinDraft(draft.draftId)}
+                      className="rounded border border-[#6e2e2e] bg-[#301111] px-2 py-1 text-[10px] uppercase tracking-[0.1em] text-[#ffb5b5] sm:justify-self-end"
+                    >
+                      X
+                    </button>
+                  </div>
+
+                  <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_auto] sm:items-center">
+                    <label className="text-[10px] uppercase tracking-[0.12em] text-slate-400">
+                      Bind public pin to internal node
+                      <select
+                        value={draft.sourceNodeId ?? ''}
+                        onChange={(event) =>
+                          onChipPinDraftChange(draft.draftId, {
+                            sourceNodeId: event.target.value || undefined,
+                          })
+                        }
+                        className="mt-1 w-full rounded border border-panelBorder bg-[#031a30] px-2 py-1 text-xs normal-case tracking-normal text-slate-100 outline-none focus:border-accent"
+                      >
+                        <option value="">Unbound / manual only</option>
+                        {hasInvalidSource ? (
+                          <option value={draft.sourceNodeId}>{draft.sourceNodeId} (missing)</option>
+                        ) : null}
+                        {hasIncompatibleSource && selectedSource ? (
+                          <option value={selectedSource.id}>{formatSourceOption(selectedSource)} - wrong direction</option>
+                        ) : null}
+                        {compatibleSources.map((source) => (
+                          <option key={source.id} value={source.id}>
+                            {formatSourceOption(source)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <span
+                      className={`rounded border px-2 py-1 text-[10px] uppercase tracking-[0.12em] ${
+                        hasInvalidSource || hasIncompatibleSource
+                          ? 'border-[#7a4a20] bg-[#2d1b0d] text-[#ffd28a]'
+                          : draft.sourceNodeId
+                            ? 'border-panelBorder bg-[#031a30] text-accentSoft'
+                            : 'border-panelBorder/60 bg-[#020f1e] text-slate-400'
+                      }`}
+                    >
+                      {hasInvalidSource
+                        ? 'Missing binding'
+                        : hasIncompatibleSource
+                          ? 'Wrong direction'
+                          : draft.sourceNodeId
+                            ? 'Bound'
+                            : 'Unbound'}
+                    </span>
+                  </div>
+
+                  <div className="mt-2 flex flex-wrap items-center justify-between gap-1 text-[10px] uppercase tracking-[0.12em] text-slate-400">
+                    <span>{selectedSource ? `Source: ${formatSourceOption(selectedSource)}` : 'No internal source selected'}</span>
+                    <span>
+                      Pos: {Math.round(clampPercent(draft.pinX ?? 50))}, {Math.round(clampPercent(draft.pinY ?? 50))}
+                    </span>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
@@ -336,6 +431,13 @@ export function ChipLibraryPanel({
       </div>
 
       <div className="mt-3 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={onStartNewChip}
+          className="rounded border border-panelBorder bg-[#031a30] px-3 py-2 text-xs uppercase tracking-[0.12em] hover:border-accent"
+        >
+          New Chip
+        </button>
         <button
           type="button"
           onClick={onCreateChip}

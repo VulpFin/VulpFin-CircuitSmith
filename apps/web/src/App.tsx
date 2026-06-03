@@ -18,7 +18,12 @@ import {
 import { exportCircuitAsLigicJson, exportCircuitAsVerilog } from '@vfcs/exporters';
 import { searchDigikeyParts } from '@vfcs/integrations';
 import { DEFAULT_NODE_LIBRARY, SimulationEngine, type SimulationSnapshot } from '@vfcs/sim-core';
-import { ChipLibraryPanel, type ChipAppearanceDraft, type ChipPinDraft } from './components/ChipLibraryPanel.js';
+import {
+  ChipLibraryPanel,
+  type ChipAppearanceDraft,
+  type ChipPinDraft,
+  type ChipPinSourceOption,
+} from './components/ChipLibraryPanel.js';
 import { ComponentPalette } from './components/ComponentPalette.js';
 import { InspectorPanel } from './components/InspectorPanel.js';
 import { StatusPanel } from './components/StatusPanel.js';
@@ -280,6 +285,32 @@ function buildPinDraftsFromCircuit(circuit: CircuitDefinition, existing: ChipPin
   return [...linkedDrafts, ...customDrafts];
 }
 
+function buildChipPinSourceOptions(circuit: CircuitDefinition): ChipPinSourceOption[] {
+  return circuit.nodes
+    .filter(
+      (node) =>
+        node.nodeType === 'INPUT'
+        || node.nodeType === 'OUTPUT'
+        || node.nodeType === 'LED'
+        || node.nodeType === 'CLOCK',
+    )
+    .sort((a, b) => {
+      const aDirection = a.nodeType === 'OUTPUT' || a.nodeType === 'LED' ? 'output' : 'input';
+      const bDirection = b.nodeType === 'OUTPUT' || b.nodeType === 'LED' ? 'output' : 'input';
+      if (aDirection !== bDirection) {
+        return aDirection === 'input' ? -1 : 1;
+      }
+
+      return a.position.y - b.position.y || a.position.x - b.position.x || a.id.localeCompare(b.id);
+    })
+    .map((node) => ({
+      id: node.id,
+      label: node.label ?? node.id,
+      nodeType: node.nodeType,
+      direction: node.nodeType === 'OUTPUT' || node.nodeType === 'LED' ? 'output' : 'input',
+    }));
+}
+
 export default function App() {
   const [circuit, setCircuit] = useState<CircuitDefinition>(initialCircuit);
   const [workspaceSize, setWorkspaceSize] = useState<WorkspaceSize>({
@@ -303,11 +334,9 @@ export default function App() {
   const [editingChipId, setEditingChipId] = useState<string | null>(null);
 
   const [chipLibrary, setChipLibrary] = useState<ChipDefinition[]>(readChipLibrary);
-  const [chipIdDraft, setChipIdDraft] = useState('chip_tff_demo');
-  const [chipNameDraft, setChipNameDraft] = useState('T Flip-Flop Demo Chip');
-  const [chipPinDrafts, setChipPinDrafts] = useState<ChipPinDraft[]>(() =>
-    buildPinDraftsFromCircuit(initialCircuit(), []),
-  );
+  const [chipIdDraft, setChipIdDraft] = useState('');
+  const [chipNameDraft, setChipNameDraft] = useState('');
+  const [chipPinDrafts, setChipPinDrafts] = useState<ChipPinDraft[]>([]);
   const [chipAppearanceDraft, setChipAppearanceDraft] =
     useState<ChipAppearanceDraft>(DEFAULT_CHIP_APPEARANCE);
 
@@ -320,6 +349,11 @@ export default function App() {
       })),
     };
   }, [circuit, nodePositions]);
+
+  const chipPinSourceOptions = useMemo(
+    () => buildChipPinSourceOptions(displayCircuit),
+    [displayCircuit],
+  );
 
   const ledSignal = useMemo<LogicValue>(() => {
     const outputNode = displayCircuit.nodes.find((node) => node.nodeType === 'LED')
@@ -1043,6 +1077,15 @@ export default function App() {
     );
   };
 
+  const startNewChipDesigner = () => {
+    setEditingChipId(null);
+    setChipIdDraft('');
+    setChipNameDraft('');
+    setChipPinDrafts([]);
+    setChipAppearanceDraft(DEFAULT_CHIP_APPEARANCE);
+    setStatusMessage('Started a new empty chip draft. Add pins manually, or use Reset Designer to pull pins from the workspace.');
+  };
+
   const clearChipLibrary = () => {
     setChipLibrary([]);
     setEditingChipId(null);
@@ -1143,6 +1186,13 @@ export default function App() {
               className="rounded-md border border-panelBorder bg-[#06233d] px-3 py-2 hover:border-accent"
             >
               Reset
+            </button>
+            <button
+              type="button"
+              onClick={startNewChipDesigner}
+              className="rounded-md border border-panelBorder bg-[#06233d] px-3 py-2 hover:border-accent"
+            >
+              New Chip
             </button>
             <button
               type="button"
@@ -1298,6 +1348,7 @@ export default function App() {
         editingChipId={editingChipId}
         chipLibrary={chipLibrary}
         chipPinDrafts={chipPinDrafts}
+        chipPinSourceOptions={chipPinSourceOptions}
         chipAppearanceDraft={chipAppearanceDraft}
         onChipIdDraftChange={(value) => {
           setChipIdDraft(value);
@@ -1310,6 +1361,7 @@ export default function App() {
         onAddChipPinDraft={addChipPinDraft}
         onRemoveChipPinDraft={removeChipPinDraft}
         onChipAppearanceDraftChange={(patch) => setChipAppearanceDraft((previous) => ({ ...previous, ...patch }))}
+        onStartNewChip={startNewChipDesigner}
         onCreateChip={createChip}
         onClearLibrary={clearChipLibrary}
         onAddChipToWorkspace={addChipInstance}
