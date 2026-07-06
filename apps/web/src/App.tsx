@@ -27,6 +27,7 @@ import {
 import { ComponentPalette } from './components/ComponentPalette.js';
 import { InspectorPanel } from './components/InspectorPanel.js';
 import { StatusPanel } from './components/StatusPanel.js';
+import { TruthTableImportPanel } from './components/TruthTableImportPanel.js';
 import { WorkspaceCanvas } from './components/WorkspaceCanvas.js';
 import { PALETTE_ITEMS } from './data/componentPalette.js';
 import { T_FLIP_FLOP_DEMO } from './data/demoCircuit.js';
@@ -35,31 +36,46 @@ import {
   createDefaultPinPosition,
   sanitizePinId,
 } from './lib/chipDesigner.js';
+import {
+  clamp,
+  clampNodeToWorkspace,
+  defaultNodeSizeForType,
+  nodeSize,
+  nodeSizeBounds,
+  WORKSPACE_DEFAULT_HEIGHT,
+  WORKSPACE_DEFAULT_WIDTH,
+  WORKSPACE_MAX_HEIGHT,
+  WORKSPACE_MAX_WIDTH,
+  WORKSPACE_MIN_HEIGHT,
+  WORKSPACE_MIN_WIDTH,
+  type WorkspaceSize,
+} from './lib/nodeSizing.js';
 import { resolveChipPinLayout, resolveNodePins } from './lib/nodePins.js';
+import {
+  autoVisualKey,
+  createSevenSegmentPreset,
+  createVisualElement,
+  mergeAutoVisualElements,
+  mergeNestedChipVisualElements,
+  normalizeChipVisualElements,
+  type ChipVisualElement,
+  type ChipVisualElementType,
+} from './lib/chipVisuals.js';
+import {
+  buildCircuitFromLogicFridayBytes,
+  buildCircuitFromTruthTableText,
+  isNativeLogicFridayBinary,
+} from './lib/truthTableImport.js';
 
 const CHIP_LIBRARY_STORAGE_KEY = 'vfcs.chip-library.v1';
-const WORKSPACE_NODE_WIDTH = 164;
-const WORKSPACE_NODE_HEIGHT = 100;
-const MIN_WORKSPACE_WIDTH = 900;
-const MIN_WORKSPACE_HEIGHT = 440;
-const CHIP_MIN_WIDTH = 120;
-const CHIP_MAX_WIDTH = 480;
-const CHIP_MIN_HEIGHT = 84;
-const CHIP_MAX_HEIGHT = 280;
-
-interface WorkspaceSize {
-  width: number;
-  height: number;
-}
+const MIN_CLOCK_HZ = 1;
+const MAX_CLOCK_HZ = 10_000_000_000;
+const DEFAULT_NO_CLOCK_STEP_SECONDS = 1 / 60;
+const MAX_REALTIME_STEPS_PER_FRAME = 2049;
 
 interface PendingWireSource {
   nodeId: string;
   pinId: string;
-}
-
-interface NodeSize {
-  width: number;
-  height: number;
 }
 
 const DEFAULT_CHIP_APPEARANCE: ChipAppearanceDraft = {
@@ -74,64 +90,100 @@ function initialCircuit(): CircuitDefinition {
   return recalculateNets(cloneCircuit(T_FLIP_FLOP_DEMO));
 }
 
+function emptyWorkspaceCircuit(): CircuitDefinition {
+  return {
+    id: 'blank_workspace',
+    name: 'Blank Workspace',
+    description: 'An empty CircuitSmith workspace.',
+    nodes: [],
+    wires: [],
+    nets: [],
+    metadata: {
+      clearedAt: new Date().toISOString(),
+    },
+  };
+}
+
 function initialExportPreview(): string {
   const verilog = exportCircuitAsVerilog(T_FLIP_FLOP_DEMO);
   return verilog.content;
 }
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
+function normalizeClockFrequencyHz(value: unknown): number {
+  const frequencyHz = typeof value === 'number' && Number.isFinite(value) ? value : 1;
+  return Math.min(MAX_CLOCK_HZ, Math.max(MIN_CLOCK_HZ, frequencyHz));
 }
 
-function clampNodeToWorkspace(position: Position, workspaceSize: WorkspaceSize): Position {
-  return {
-    x: clamp(position.x, 0, Math.max(0, workspaceSize.width - WORKSPACE_NODE_WIDTH)),
-    y: clamp(position.y, 0, Math.max(0, workspaceSize.height - WORKSPACE_NODE_HEIGHT)),
-  };
+function clockHalfPeriodSeconds(frequencyHz: number): number {
+  return 1 / (normalizeClockFrequencyHz(frequencyHz) * 2);
 }
 
-function nodeSize(node: NodeInstance): NodeSize {
-  if (node.nodeType !== 'CHIP') {
-    return { width: WORKSPACE_NODE_WIDTH, height: WORKSPACE_NODE_HEIGHT };
+function findFastestClockHz(
+  circuit: CircuitDefinition,
+  chipLibrary: ChipDefinition[],
+  visitedChipIds = new Set<string>(),
+): number | null {
+  let fastest: number | null = null;
+
+  for (const node of circuit.nodes) {
+    if (node.nodeType === 'CLOCK') {
+      fastest = Math.max(fastest ?? 0, normalizeClockFrequencyHz(node.parameters?.frequencyHz));
+    }
+
+    if (node.nodeType === 'CHIP' && node.chipRefId && !visitedChipIds.has(node.chipRefId)) {
+      const chip = chipLibrary.find((entry) => entry.id === node.chipRefId);
+      if (!chip) {
+        continue;
+      }
+
+      const nextVisited = new Set(visitedChipIds);
+      nextVisited.add(node.chipRefId);
+      const nestedFastest = findFastestClockHz(chip.internalCircuit, chipLibrary, nextVisited);
+      if (nestedFastest) {
+        fastest = Math.max(fastest ?? 0, nestedFastest);
+      }
+    }
   }
 
-  const widthRaw = Number(node.parameters?.width ?? 176);
-  const heightRaw = Number(node.parameters?.height ?? 104);
-  const width = Number.isFinite(widthRaw) ? clamp(Math.round(widthRaw), CHIP_MIN_WIDTH, CHIP_MAX_WIDTH) : 176;
-  const height = Number.isFinite(heightRaw) ? clamp(Math.round(heightRaw), CHIP_MIN_HEIGHT, CHIP_MAX_HEIGHT) : 104;
-
-  return { width, height };
+  return fastest;
 }
 
-function clampNodeToWorkspaceWithSize(position: Position, workspaceSize: WorkspaceSize, size: NodeSize): Position {
-  return {
-    x: clamp(position.x, 0, Math.max(0, workspaceSize.width - size.width)),
-    y: clamp(position.y, 0, Math.max(0, workspaceSize.height - size.height)),
-  };
+function simulationStepSecondsForCircuit(circuit: CircuitDefinition, chipLibrary: ChipDefinition[]): number {
+  const fastestClockHz = findFastestClockHz(circuit, chipLibrary);
+  return fastestClockHz ? clockHalfPeriodSeconds(fastestClockHz) : DEFAULT_NO_CLOCK_STEP_SECONDS;
 }
 
-function frequencyToHalfCycleTicks(frequencyHz: number): number {
-  const minHz = 1;
-  const maxHz = 10_000_000_000;
-  const clamped = Math.min(maxHz, Math.max(minHz, frequencyHz));
-  const normalized = (Math.log10(clamped) - Math.log10(minHz)) / (Math.log10(maxHz) - Math.log10(minHz));
-  const slowestHalfCycleTicks = 12;
-  const fastestHalfCycleTicks = 1;
-  const mapped =
-    slowestHalfCycleTicks - normalized * (slowestHalfCycleTicks - fastestHalfCycleTicks);
-
-  return Math.max(fastestHalfCycleTicks, Math.round(mapped));
-}
-
-function spawnPosition(nodeIndex: number, workspaceSize: WorkspaceSize): Position {
-  const maxColumns = Math.max(1, Math.floor((workspaceSize.width - 40) / 170));
+function spawnPosition(nodeType: string, nodeIndex: number, workspaceSize: WorkspaceSize): Position {
+  const size = defaultNodeSizeForType(nodeType);
+  const gapX = 28;
+  const gapY = 28;
+  const maxColumns = Math.max(1, Math.floor((workspaceSize.width - 40) / (size.width + gapX)));
   const column = nodeIndex % maxColumns;
   const row = Math.floor(nodeIndex / maxColumns);
   const raw = {
-    x: 40 + column * 170,
-    y: 40 + row * 110,
+    x: 40 + column * (size.width + gapX),
+    y: 40 + row * (size.height + gapY),
   };
-  return clampNodeToWorkspace(raw, workspaceSize);
+  return clampNodeToWorkspace(raw, workspaceSize, size);
+}
+
+function workspaceSizeForCircuit(circuit: CircuitDefinition): WorkspaceSize {
+  const padding = 160;
+  const extents = circuit.nodes.reduce(
+    (bounds, node) => {
+      const size = nodeSize(node);
+      return {
+        width: Math.max(bounds.width, node.position.x + size.width + padding),
+        height: Math.max(bounds.height, node.position.y + size.height + padding),
+      };
+    },
+    { width: WORKSPACE_DEFAULT_WIDTH, height: WORKSPACE_DEFAULT_HEIGHT },
+  );
+
+  return {
+    width: clamp(Math.ceil(extents.width), WORKSPACE_DEFAULT_WIDTH, WORKSPACE_MAX_WIDTH),
+    height: clamp(Math.ceil(extents.height), WORKSPACE_DEFAULT_HEIGHT, WORKSPACE_MAX_HEIGHT),
+  };
 }
 
 function readChipLibrary(): ChipDefinition[] {
@@ -150,7 +202,7 @@ function readChipLibrary(): ChipDefinition[] {
       return [];
     }
 
-    return parsed;
+    return hydrateNestedChipVisualsInLibrary(parsed).chips;
   } catch {
     return [];
   }
@@ -164,6 +216,14 @@ function asRecord(value: unknown): Record<string, unknown> {
   return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {};
 }
 
+function sourceKey(nodeId: string, pinId?: string): string {
+  return pinId ? `${nodeId}.${pinId}` : nodeId;
+}
+
+function draftSourceKey(draft: ChipPinDraft): string | null {
+  return draft.sourceNodeId ? sourceKey(draft.sourceNodeId, draft.sourcePinId) : null;
+}
+
 function buildPinDraftsFromChip(chip: ChipDefinition): ChipPinDraft[] {
   const pinLayout = asRecord(chip.metadata?.pinLayout);
   const pinBindings = asRecord(chip.metadata?.pinBindings);
@@ -175,36 +235,40 @@ function buildPinDraftsFromChip(chip: ChipDefinition): ChipPinDraft[] {
     .map((node) => node.id);
 
   const used = new Set<string>();
-  const nextInputSource = () => {
+  const nextInputSource = (): { sourceNodeId: string; sourcePinId?: string } | undefined => {
     const next = inputNodeIds.find((nodeId) => !used.has(nodeId));
     if (next) {
       used.add(next);
+      return { sourceNodeId: next };
     }
-    return next;
+    return undefined;
   };
-  const nextOutputSource = () => {
+  const nextOutputSource = (): { sourceNodeId: string; sourcePinId?: string } | undefined => {
     const next = outputNodeIds.find((nodeId) => !used.has(nodeId));
     if (next) {
       used.add(next);
+      return { sourceNodeId: next };
     }
-    return next;
+    return undefined;
   };
 
   return chip.publicPins.map((pin, index) => {
     const rawBinding = asRecord(pinBindings[pin.id]);
     let sourceNodeId = typeof rawBinding.sourceNodeId === 'string' ? rawBinding.sourceNodeId : undefined;
+    let sourcePinId = typeof rawBinding.sourcePinId === 'string' ? rawBinding.sourcePinId : undefined;
     if (sourceNodeId) {
-      used.add(sourceNodeId);
+      used.add(sourceKey(sourceNodeId, sourcePinId));
     }
 
     if (!sourceNodeId) {
-      if (pin.direction === 'output') {
-        sourceNodeId = nextOutputSource();
-      } else if (pin.direction === 'input') {
-        sourceNodeId = nextInputSource();
-      } else {
-        sourceNodeId = nextInputSource() ?? nextOutputSource();
-      }
+      const fallback =
+        pin.direction === 'output'
+          ? nextOutputSource()
+          : pin.direction === 'input'
+            ? nextInputSource()
+            : nextInputSource() ?? nextOutputSource();
+      sourceNodeId = fallback?.sourceNodeId;
+      sourcePinId = fallback?.sourcePinId;
     }
 
     const rawPoint = asRecord(pinLayout[pin.id]);
@@ -219,6 +283,7 @@ function buildPinDraftsFromChip(chip: ChipDefinition): ChipPinDraft[] {
       name: pin.name,
       direction: pin.direction,
       sourceNodeId,
+      sourcePinId,
       pinX,
       pinY,
     } satisfies ChipPinDraft;
@@ -228,13 +293,15 @@ function buildPinDraftsFromChip(chip: ChipDefinition): ChipPinDraft[] {
 function buildPinDraftsFromCircuit(circuit: CircuitDefinition, existing: ChipPinDraft[]): ChipPinDraft[] {
   const bySourceId = new Map<string, ChipPinDraft>();
   for (const draft of existing) {
-    if (draft.sourceNodeId) {
-      bySourceId.set(draft.sourceNodeId, draft);
+    const key = draftSourceKey(draft);
+    if (key) {
+      bySourceId.set(key, draft);
     }
   }
 
   let inputIndex = 0;
   let outputIndex = 0;
+  const linkedSourceKeys = new Set<string>();
 
   const linkedDrafts = circuit.nodes
     .filter(
@@ -250,7 +317,9 @@ function buildPinDraftsFromCircuit(circuit: CircuitDefinition, existing: ChipPin
         direction === 'output'
           ? createDefaultPinPosition(direction, outputIndex++)
           : createDefaultPinPosition(direction, inputIndex++);
-      const current = bySourceId.get(node.id);
+      const key = sourceKey(node.id);
+      linkedSourceKeys.add(key);
+      const current = bySourceId.get(key);
       if (current) {
         return {
           ...current,
@@ -269,13 +338,17 @@ function buildPinDraftsFromCircuit(circuit: CircuitDefinition, existing: ChipPin
         name: label,
         direction,
         sourceNodeId: node.id,
+        sourcePinId: undefined,
         pinX: basePosition.x,
         pinY: basePosition.y,
       } satisfies ChipPinDraft;
     });
 
   const customDrafts = existing
-    .filter((draft) => !draft.sourceNodeId)
+    .filter((draft) => {
+      const key = draftSourceKey(draft);
+      return !key || !linkedSourceKeys.has(key);
+    })
     .map((draft, index) => ({
       ...draft,
       pinX: draft.pinX ?? createDefaultPinPosition(draft.direction, index).x,
@@ -285,30 +358,51 @@ function buildPinDraftsFromCircuit(circuit: CircuitDefinition, existing: ChipPin
   return [...linkedDrafts, ...customDrafts];
 }
 
-function buildChipPinSourceOptions(circuit: CircuitDefinition): ChipPinSourceOption[] {
-  return circuit.nodes
-    .filter(
-      (node) =>
-        node.nodeType === 'INPUT'
-        || node.nodeType === 'OUTPUT'
-        || node.nodeType === 'LED'
-        || node.nodeType === 'CLOCK',
-    )
-    .sort((a, b) => {
-      const aDirection = a.nodeType === 'OUTPUT' || a.nodeType === 'LED' ? 'output' : 'input';
-      const bDirection = b.nodeType === 'OUTPUT' || b.nodeType === 'LED' ? 'output' : 'input';
-      if (aDirection !== bDirection) {
-        return aDirection === 'input' ? -1 : 1;
-      }
+function buildChipPinSourceOptions(
+  circuit: CircuitDefinition,
+  chipLibrary: ChipDefinition[],
+): ChipPinSourceOption[] {
+  const options: ChipPinSourceOption[] = [];
+  const sortedNodes = [...circuit.nodes].sort(
+    (a, b) => a.position.y - b.position.y || a.position.x - b.position.x || a.id.localeCompare(b.id),
+  );
 
-      return a.position.y - b.position.y || a.position.x - b.position.x || a.id.localeCompare(b.id);
-    })
-    .map((node) => ({
-      id: node.id,
-      label: node.label ?? node.id,
-      nodeType: node.nodeType,
-      direction: node.nodeType === 'OUTPUT' || node.nodeType === 'LED' ? 'output' : 'input',
-    }));
+  for (const node of sortedNodes) {
+    const label = node.label ?? node.id;
+
+    if (node.nodeType === 'INPUT' || node.nodeType === 'CLOCK') {
+      options.push({
+        id: sourceKey(node.id),
+        nodeId: node.id,
+        label,
+        nodeType: node.nodeType,
+        direction: 'input',
+      });
+    }
+
+    if (node.nodeType === 'OUTPUT' || node.nodeType === 'LED') {
+      options.push({
+        id: sourceKey(node.id),
+        nodeId: node.id,
+        label,
+        nodeType: node.nodeType,
+        direction: 'output',
+      });
+    }
+
+    for (const pin of resolveNodePins(node, chipLibrary).outputPins) {
+      options.push({
+        id: sourceKey(node.id, pin.id),
+        nodeId: node.id,
+        pinId: pin.id,
+        label: `${label}.${pin.name}`,
+        nodeType: node.nodeType,
+        direction: pin.direction,
+      });
+    }
+  }
+
+  return options;
 }
 
 function findSelfReferencingChipNodes(circuit: CircuitDefinition, chipId: string): NodeInstance[] {
@@ -324,18 +418,75 @@ function describeSelfReferencingChip(circuit: CircuitDefinition, chipId: string)
   return `Chip ${chipId} contains itself as internal node ${recursiveNodes.map((node) => node.id).join(', ')}. Rebuild it from the real internal circuit before saving.`;
 }
 
+function hydrateNestedChipVisualsInLibrary(chips: ChipDefinition[]): {
+  chips: ChipDefinition[];
+  addedVisualCount: number;
+} {
+  let nextLibrary = chips;
+  let addedVisualCount = 0;
+
+  for (let pass = 0; pass < Math.max(1, chips.length); pass += 1) {
+    let changed = false;
+    nextLibrary = nextLibrary.map((chip) => {
+      const existingVisuals = normalizeChipVisualElements(chip.metadata?.visualElements);
+      const mergedVisuals = mergeNestedChipVisualElements({
+        circuit: chip.internalCircuit,
+        chipLibrary: nextLibrary,
+        existing: existingVisuals,
+      });
+
+      if (mergedVisuals.length === existingVisuals.length) {
+        return chip;
+      }
+
+      changed = true;
+      addedVisualCount += mergedVisuals.length - existingVisuals.length;
+      return {
+        ...chip,
+        metadata: {
+          ...chip.metadata,
+          visualElements: mergedVisuals,
+        },
+      };
+    });
+
+    if (!changed) {
+      break;
+    }
+  }
+
+  return { chips: nextLibrary, addedVisualCount };
+}
+
+function downloadJsonFile(filename: string, payload: string): boolean {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return false;
+  }
+
+  const blob = new Blob([payload], { type: 'application/json' });
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+  return true;
+}
+
 export default function App() {
   const [circuit, setCircuit] = useState<CircuitDefinition>(initialCircuit);
   const [workspaceSize, setWorkspaceSize] = useState<WorkspaceSize>({
-    width: 980,
-    height: MIN_WORKSPACE_HEIGHT,
+    width: WORKSPACE_DEFAULT_WIDTH,
+    height: WORKSPACE_DEFAULT_HEIGHT,
   });
   const [nodePositions, setNodePositions] = useState<Record<string, Position>>(() =>
     Object.fromEntries(initialCircuit().nodes.map((node) => [node.id, node.position])),
   );
 
   const engineRef = useRef<SimulationEngine>(new SimulationEngine(circuit, { chipLibrary: readChipLibrary() }));
-  const [snapshot, setSnapshot] = useState<SimulationSnapshot>(() => engineRef.current.getSnapshot());
+  const [snapshot, setSnapshot] = useState<SimulationSnapshot>(() => engineRef.current.settle());
 
   const [running, setRunning] = useState(false);
   const [statusMessage, setStatusMessage] = useState('Ready.');
@@ -345,6 +496,7 @@ export default function App() {
   const [exportPreview, setExportPreview] = useState(initialExportPreview);
   const [clipboardNode, setClipboardNode] = useState<NodeInstance | null>(null);
   const [editingChipId, setEditingChipId] = useState<string | null>(null);
+  const [truthTableImportDraft, setTruthTableImportDraft] = useState('');
 
   const [chipLibrary, setChipLibrary] = useState<ChipDefinition[]>(readChipLibrary);
   const [chipIdDraft, setChipIdDraft] = useState('');
@@ -352,6 +504,8 @@ export default function App() {
   const [chipPinDrafts, setChipPinDrafts] = useState<ChipPinDraft[]>([]);
   const [chipAppearanceDraft, setChipAppearanceDraft] =
     useState<ChipAppearanceDraft>(DEFAULT_CHIP_APPEARANCE);
+  const [chipVisualDrafts, setChipVisualDrafts] = useState<ChipVisualElement[]>([]);
+  const [suppressedAutoVisualKeys, setSuppressedAutoVisualKeys] = useState<string[]>([]);
 
   const displayCircuit = useMemo<CircuitDefinition>(() => {
     return {
@@ -363,14 +517,28 @@ export default function App() {
     };
   }, [circuit, nodePositions]);
 
-  const editingChip = useMemo(
-    () => chipLibrary.find((entry) => entry.id === editingChipId) ?? null,
-    [chipLibrary, editingChipId],
-  );
-  const designerSourceCircuit = editingChip?.internalCircuit ?? displayCircuit;
+  const designerSourceCircuit = displayCircuit;
   const chipPinSourceOptions = useMemo(
-    () => buildChipPinSourceOptions(designerSourceCircuit),
-    [designerSourceCircuit],
+    () => buildChipPinSourceOptions(designerSourceCircuit, chipLibrary),
+    [chipLibrary, designerSourceCircuit],
+  );
+  const chipVisualOutputPins = useMemo(
+    () =>
+      buildChipPinsFromDrafts(chipPinDrafts).publicPins.filter(
+        (pin) => pin.direction === 'output' || pin.direction === 'bidirectional',
+      ),
+    [chipPinDrafts],
+  );
+  const chipVisualSourceOptions = useMemo(
+    () =>
+      chipPinSourceOptions.filter(
+        (source) => source.direction === 'output' || source.direction === 'bidirectional',
+      ),
+    [chipPinSourceOptions],
+  );
+  const suppressedAutoVisualKeySet = useMemo(
+    () => new Set(suppressedAutoVisualKeys),
+    [suppressedAutoVisualKeys],
   );
   const chipDesignerWarning = editingChipId
     ? describeSelfReferencingChip(designerSourceCircuit, editingChipId)
@@ -390,18 +558,22 @@ export default function App() {
     return displayCircuit.nodes.filter((node) => node.nodeType === 'CLOCK');
   }, [displayCircuit.nodes]);
 
+  const simulationStepSeconds = useMemo(
+    () => simulationStepSecondsForCircuit(displayCircuit, chipLibrary),
+    [chipLibrary, displayCircuit],
+  );
+
   const nextClockTransitions = useMemo(() => {
     return clockNodes.map((node) => {
-      const frequencyHzRaw = Number(node.parameters?.frequencyHz ?? 1);
-      const frequencyHz = Number.isFinite(frequencyHzRaw) ? Math.max(1, frequencyHzRaw) : 1;
-      const halfCycleTicks = frequencyToHalfCycleTicks(frequencyHz);
+      const frequencyHz = normalizeClockFrequencyHz(node.parameters?.frequencyHz);
+      const halfCycleSeconds = clockHalfPeriodSeconds(frequencyHz);
       const current = (snapshot.nodeOutputs[node.id]?.OUT as LogicValue) ?? '0';
-      const remainder = snapshot.tick % halfCycleTicks;
-      const ticksUntilToggle = remainder === 0 ? halfCycleTicks : halfCycleTicks - remainder;
+      const halfCyclesElapsed = Math.floor(snapshot.timeSeconds / halfCycleSeconds + 1e-9);
+      const nextTimeSeconds = (halfCyclesElapsed + 1) * halfCycleSeconds;
+      const secondsToToggle = Math.max(0, nextTimeSeconds - snapshot.timeSeconds);
+      const ticksUntilToggle = Math.max(1, Math.ceil(secondsToToggle / simulationStepSeconds));
       const nextTick = snapshot.tick + ticksUntilToggle;
       const nextState: LogicValue = current === '1' ? '0' : '1';
-      const hzPerTick = running ? 1000 / 120 : null;
-      const secondsToToggle = hzPerTick ? ticksUntilToggle / hzPerTick : null;
 
       return {
         nodeId: node.id,
@@ -409,33 +581,34 @@ export default function App() {
         frequencyHz,
         current,
         nextTick,
+        nextTimeSeconds,
         nextState,
         ticksUntilToggle,
         secondsToToggle,
       };
     });
-  }, [clockNodes, running, snapshot.nodeOutputs, snapshot.tick]);
+  }, [clockNodes, simulationStepSeconds, snapshot.nodeOutputs, snapshot.tick, snapshot.timeSeconds]);
 
   const inputNodes = useMemo(() => {
     return displayCircuit.nodes.filter((node) => node.nodeType === 'INPUT');
   }, [displayCircuit.nodes]);
 
   useEffect(() => {
-    const next = engineRef.current.getSnapshot();
+    const next = engineRef.current.settle();
     setSnapshot(next);
   }, []);
 
   useEffect(() => {
     const nextEngine = new SimulationEngine(circuit, { chipLibrary });
     engineRef.current = nextEngine;
-    setSnapshot(nextEngine.getSnapshot());
+    setSnapshot(nextEngine.settle());
   }, [circuit, chipLibrary]);
 
   useEffect(() => {
     setNodePositions((previous) => {
       const next: Record<string, Position> = {};
       for (const node of circuit.nodes) {
-        next[node.id] = clampNodeToWorkspaceWithSize(
+        next[node.id] = clampNodeToWorkspace(
           previous[node.id] ?? node.position,
           workspaceSize,
           nodeSize(node),
@@ -446,25 +619,75 @@ export default function App() {
   }, [circuit.nodes, workspaceSize]);
 
   useEffect(() => {
-    if (editingChipId) {
-      return;
-    }
     setChipPinDrafts((previous) => buildPinDraftsFromCircuit(circuit, previous));
-  }, [circuit, editingChipId]);
+  }, [circuit]);
+
+  useEffect(() => {
+    const sources = chipVisualSourceOptions.map((source) => ({
+      nodeId: source.nodeId,
+      pinId: source.pinId,
+      label: source.label,
+    }));
+
+    setChipVisualDrafts((previous) =>
+      mergeAutoVisualElements({
+        outputPins: chipVisualOutputPins,
+        sources,
+        existing: previous,
+        suppressedAutoKeys: suppressedAutoVisualKeySet,
+      }),
+    );
+  }, [chipVisualOutputPins, chipVisualSourceOptions, suppressedAutoVisualKeySet]);
+
+  useEffect(() => {
+    setChipVisualDrafts((previous) =>
+      mergeNestedChipVisualElements({
+        circuit: designerSourceCircuit,
+        chipLibrary,
+        existing: previous,
+        suppressedAutoKeys: suppressedAutoVisualKeySet,
+      }),
+    );
+  }, [chipLibrary, designerSourceCircuit, suppressedAutoVisualKeySet]);
 
   useEffect(() => {
     if (!running) {
       return;
     }
 
-    const handle = window.setInterval(() => {
-      setSnapshot(engineRef.current.step());
-    }, 120);
+    let frameId = 0;
+    let previousTimeMs = window.performance.now();
+    let accumulatedSeconds = 0;
+
+    const runFrame = (timeMs: number) => {
+      const elapsedSeconds = Math.min(0.25, Math.max(0, (timeMs - previousTimeMs) / 1000));
+      previousTimeMs = timeMs;
+      accumulatedSeconds += elapsedSeconds;
+
+      const requestedSteps = Math.floor(accumulatedSeconds / simulationStepSeconds);
+      if (requestedSteps > 0) {
+        const stepsToRun = Math.min(requestedSteps, MAX_REALTIME_STEPS_PER_FRAME);
+        accumulatedSeconds -= stepsToRun * simulationStepSeconds;
+
+        if (requestedSteps > MAX_REALTIME_STEPS_PER_FRAME) {
+          accumulatedSeconds = Math.min(
+            accumulatedSeconds,
+            simulationStepSeconds * MAX_REALTIME_STEPS_PER_FRAME * 2,
+          );
+        }
+
+        setSnapshot(engineRef.current.runSteps(stepsToRun, simulationStepSeconds));
+      }
+
+      frameId = window.requestAnimationFrame(runFrame);
+    };
+
+    frameId = window.requestAnimationFrame(runFrame);
 
     return () => {
-      window.clearInterval(handle);
+      window.cancelAnimationFrame(frameId);
     };
-  }, [running]);
+  }, [running, simulationStepSeconds]);
 
   useEffect(() => {
     window.localStorage.setItem(CHIP_LIBRARY_STORAGE_KEY, JSON.stringify(chipLibrary));
@@ -509,7 +732,7 @@ export default function App() {
       const sourceNode = existing ?? clipboardNode;
       const size = nodeSize(sourceNode);
       const basePosition = nodePositions[selectedNodeId ?? ''] ?? sourceNode.position;
-      const position = clampNodeToWorkspaceWithSize(
+      const position = clampNodeToWorkspace(
         {
           x: basePosition.x + 28,
           y: basePosition.y + 24,
@@ -575,7 +798,7 @@ export default function App() {
         const stepSize = event.shiftKey ? 10 : 1;
         const size = nodeSize(node);
         const basePosition = nodePositions[selectedNodeId] ?? node.position;
-        const nextPosition = clampNodeToWorkspaceWithSize(
+        const nextPosition = clampNodeToWorkspace(
           {
             x: basePosition.x + arrowDelta.x * stepSize,
             y: basePosition.y + arrowDelta.y * stepSize,
@@ -632,14 +855,44 @@ export default function App() {
   ]);
 
   const step = () => {
-    setSnapshot(engineRef.current.step());
-    setStatusMessage('Advanced one simulation step.');
+    setSnapshot(engineRef.current.step(simulationStepSeconds));
+    setStatusMessage(`Advanced one simulation step (${simulationStepSeconds.toExponential(3)}s).`);
   };
 
   const reset = () => {
     setRunning(false);
-    setSnapshot(engineRef.current.reset());
+    engineRef.current.reset();
+    setSnapshot(engineRef.current.settle());
     setStatusMessage('Simulation reset.');
+  };
+
+  const clearWorkspace = () => {
+    const hasWorkspaceContent = circuit.nodes.length > 0 || circuit.wires.length > 0;
+    if (hasWorkspaceContent && typeof window !== 'undefined') {
+      const confirmed = window.confirm(
+        `Clear the current workspace?\n\nThis removes ${circuit.nodes.length} node(s) and ${circuit.wires.length} wire(s) from the canvas. Your saved custom chip library will not be deleted.`,
+      );
+      if (!confirmed) {
+        setStatusMessage('Kept the current workspace.');
+        return;
+      }
+    }
+
+    const nextCircuit = emptyWorkspaceCircuit();
+    setRunning(false);
+    setCircuit(nextCircuit);
+    setNodePositions({});
+    setWorkspaceSize({
+      width: WORKSPACE_DEFAULT_WIDTH,
+      height: WORKSPACE_DEFAULT_HEIGHT,
+    });
+    setSelectedNodeId(null);
+    setSelectedWireId(null);
+    setPendingWireSource(null);
+    setClipboardNode(null);
+    setEditingChipId(null);
+    setExportPreview(JSON.stringify(nextCircuit, null, 2));
+    setStatusMessage('Cleared the workspace. Custom chips in the library were left untouched.');
   };
 
   const toggleRunPause = () => {
@@ -669,7 +922,7 @@ export default function App() {
     const nextValue: LogicValue = current === '1' ? '0' : '1';
 
     engineRef.current.setInput(nodeId, nextValue);
-    setSnapshot(engineRef.current.getSnapshot());
+    setSnapshot(engineRef.current.settle());
     setStatusMessage(`Toggled ${nodeId} to ${nextValue}.`);
   };
 
@@ -701,7 +954,7 @@ export default function App() {
     setCircuit((previous) => {
       const id = createNodeInstanceId(previous, nodeType);
       const nodeIndex = previous.nodes.length;
-      const position = spawnPosition(nodeIndex, workspaceSize);
+      const position = spawnPosition(nodeType, nodeIndex, workspaceSize);
 
       const nextCircuit: CircuitDefinition = {
         ...cloneCircuit(previous),
@@ -743,7 +996,7 @@ export default function App() {
     setCircuit((previous) => {
       const id = createNodeInstanceId(previous, 'CHIP');
       const nodeIndex = previous.nodes.length;
-      const position = spawnPosition(nodeIndex, workspaceSize);
+      const position = spawnPosition('CHIP', nodeIndex, workspaceSize);
 
       const next = cloneCircuit(previous);
       next.nodes.push({
@@ -769,10 +1022,10 @@ export default function App() {
 
   const moveNode = (nodeId: string, position: Position) => {
     const node = displayCircuit.nodes.find((entry) => entry.id === nodeId);
-    const size = node ? nodeSize(node) : { width: WORKSPACE_NODE_WIDTH, height: WORKSPACE_NODE_HEIGHT };
+    const size = node ? nodeSize(node) : defaultNodeSizeForType('INPUT');
     setNodePositions((previous) => ({
       ...previous,
-      [nodeId]: clampNodeToWorkspaceWithSize(position, workspaceSize, size),
+      [nodeId]: clampNodeToWorkspace(position, workspaceSize, size),
     }));
   };
 
@@ -874,10 +1127,12 @@ export default function App() {
     let pinToUse = candidatePins[0];
     if (targetNode.nodeType === 'CHIP') {
       const layout = resolveChipPinLayout(targetNode, chipLibrary);
-      const sourceY = sourceNode.position.y + WORKSPACE_NODE_HEIGHT * 0.5;
+      const sourceSize = nodeSize(sourceNode);
+      const targetSize = nodeSize(targetNode);
+      const sourceY = sourceNode.position.y + sourceSize.height * 0.5;
       pinToUse = [...candidatePins].sort((a, b) => {
-        const yA = targetNode.position.y + WORKSPACE_NODE_HEIGHT * ((layout[a.id]?.y ?? 50) / 100);
-        const yB = targetNode.position.y + WORKSPACE_NODE_HEIGHT * ((layout[b.id]?.y ?? 50) / 100);
+        const yA = targetNode.position.y + targetSize.height * ((layout[a.id]?.y ?? 50) / 100);
+        const yB = targetNode.position.y + targetSize.height * ((layout[b.id]?.y ?? 50) / 100);
         return Math.abs(yA - sourceY) - Math.abs(yB - sourceY);
       })[0];
     }
@@ -969,9 +1224,18 @@ export default function App() {
     setStatusMessage(`Wire ${wireId} source switched to ${wire.from.nodeId}.${sourcePinId}.`);
   };
 
-  const updateChipInstanceSize = (nodeId: string, width: number, height: number) => {
-    const clampedWidth = clamp(Math.round(width), CHIP_MIN_WIDTH, CHIP_MAX_WIDTH);
-    const clampedHeight = clamp(Math.round(height), CHIP_MIN_HEIGHT, CHIP_MAX_HEIGHT);
+  const updateNodeSize = (nodeId: string, width: number, height: number) => {
+    const currentNode = displayCircuit.nodes.find((entry) => entry.id === nodeId);
+    if (!currentNode) {
+      setStatusMessage(`Node ${nodeId} was not found.`);
+      return;
+    }
+    const currentSize = nodeSize(currentNode);
+    const bounds = nodeSizeBounds(currentNode);
+    const nextWidth = Number.isFinite(width) ? Math.round(width) : currentSize.width;
+    const nextHeight = Number.isFinite(height) ? Math.round(height) : currentSize.height;
+    const clampedWidth = clamp(nextWidth, bounds.minWidth, bounds.maxWidth);
+    const clampedHeight = clamp(nextHeight, bounds.minHeight, bounds.maxHeight);
     updateCircuitNode(nodeId, (entry) => ({
       ...entry,
       parameters: {
@@ -991,9 +1255,24 @@ export default function App() {
     }
 
     const appearance = asRecord(chip.metadata?.appearance);
+    const suppressedKeys = Array.isArray(chip.metadata?.suppressedAutoVisualKeys)
+      ? chip.metadata.suppressedAutoVisualKeys.filter((value): value is string => typeof value === 'string')
+      : [];
+    const internalCircuit = recalculateNets(cloneCircuit(chip.internalCircuit));
+    const internalPositions = Object.fromEntries(internalCircuit.nodes.map((node) => [node.id, node.position]));
+
+    setRunning(false);
+    setCircuit(internalCircuit);
+    setNodePositions(internalPositions);
+    setWorkspaceSize(workspaceSizeForCircuit(internalCircuit));
+    setSelectedNodeId(null);
+    setSelectedWireId(null);
+    setPendingWireSource(null);
     setChipIdDraft(chip.id);
     setChipNameDraft(chip.name);
     setChipPinDrafts(buildPinDraftsFromChip(chip));
+    setChipVisualDrafts(normalizeChipVisualElements(chip.metadata?.visualElements));
+    setSuppressedAutoVisualKeys(suppressedKeys);
     setChipAppearanceDraft({
       shape:
         appearance.shape === 'rounded' || appearance.shape === 'seven-segment'
@@ -1008,7 +1287,11 @@ export default function App() {
       symbol: typeof appearance.symbol === 'string' ? appearance.symbol : DEFAULT_CHIP_APPEARANCE.symbol,
     });
     setEditingChipId(chip.id);
-    setStatusMessage(describeSelfReferencingChip(chip.internalCircuit, chip.id) ?? `Loaded ${chip.name} for editing in chip designer.`);
+    setExportPreview(exportCircuitAsVerilog(internalCircuit).content);
+    setStatusMessage(
+      describeSelfReferencingChip(internalCircuit, chip.id)
+      ?? `Opened ${chip.name} internals on the workspace. Edit the canvas, then press Update Chip to save it back.`,
+    );
   };
 
   const importChipJson = (payload: string) => {
@@ -1043,17 +1326,16 @@ export default function App() {
         return;
       }
 
-      setChipLibrary((previous) => {
-        const byId = new Map(previous.map((chip) => [chip.id, chip]));
-        for (const chip of incoming) {
-          byId.set(chip.id, chip);
-        }
-        return [...byId.values()];
-      });
+      const byId = new Map(chipLibrary.map((chip) => [chip.id, chip]));
+      for (const chip of incoming) {
+        byId.set(chip.id, chip);
+      }
+      const hydrated = hydrateNestedChipVisualsInLibrary([...byId.values()]);
+      setChipLibrary(hydrated.chips);
       setStatusMessage(
         `Imported ${incoming.length} chip definition(s).${
           skippedRecursive.length > 0 ? ` Skipped recursive chip(s): ${skippedRecursive.join(', ')}.` : ''
-        }`,
+        }${hydrated.addedVisualCount > 0 ? ` Added ${hydrated.addedVisualCount} nested face element(s).` : ''}`,
       );
     } catch {
       setStatusMessage('Chip import failed: invalid JSON payload.');
@@ -1080,6 +1362,31 @@ export default function App() {
       setExportPreview(payload);
       setStatusMessage(`Clipboard write failed; ${chip.name} JSON pushed to preview panel.`);
     }
+  };
+
+  const exportChipLibraryJson = async () => {
+    const payload = JSON.stringify(chipLibrary, null, 2);
+    const filename = `vfcs-chip-library-${new Date().toISOString().slice(0, 10)}.json`;
+    setExportPreview(payload);
+
+    let copied = false;
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(payload);
+        copied = true;
+      }
+    } catch {
+      copied = false;
+    }
+
+    const downloaded = downloadJsonFile(filename, payload);
+    const destinations = [
+      'preview panel',
+      copied ? 'clipboard' : null,
+      downloaded ? filename : null,
+    ].filter(Boolean);
+
+    setStatusMessage(`Exported ${chipLibrary.length} chip(s) to ${destinations.join(', ')}.`);
   };
 
   const createChip = () => {
@@ -1119,6 +1426,8 @@ export default function App() {
         appearance: chipAppearance,
         pinLayout: built.pinLayout,
         pinBindings: built.pinBindings,
+        visualElements: chipVisualDrafts,
+        suppressedAutoVisualKeys,
       },
     });
 
@@ -1135,18 +1444,67 @@ export default function App() {
   };
 
   const startNewChipDesigner = () => {
+    const usedIds = new Set(chipLibrary.map((chip) => chip.id));
+    const currentDraftId = sanitizeId(chipIdDraft);
+    if (currentDraftId) {
+      usedIds.add(currentDraftId);
+    }
+
+    let nextIndex = 1;
+    while (usedIds.has(`empty_chip_${nextIndex}`)) {
+      nextIndex += 1;
+    }
+
+    const nextChipId = `empty_chip_${nextIndex}`;
+    const nextChipName = `Empty Chip ${nextIndex}`;
     setEditingChipId(null);
-    setChipIdDraft('');
-    setChipNameDraft('');
+    setChipIdDraft(nextChipId);
+    setChipNameDraft(nextChipName);
     setChipPinDrafts([]);
     setChipAppearanceDraft(DEFAULT_CHIP_APPEARANCE);
-    setStatusMessage('Started a new empty chip draft. Add pins manually, or use Reset Designer to pull pins from the workspace.');
+    setChipVisualDrafts([]);
+    setSuppressedAutoVisualKeys([]);
+    setStatusMessage(
+      `Started ${nextChipName}. Add pins manually, or use Reset Designer to pull pins from the workspace.`,
+    );
   };
 
   const clearChipLibrary = () => {
     setChipLibrary([]);
     setEditingChipId(null);
+    setSuppressedAutoVisualKeys([]);
     setStatusMessage('Cleared local chip library.');
+  };
+
+  const deleteChipFromLibrary = (chipId: string) => {
+    const chip = chipLibrary.find((entry) => entry.id === chipId);
+    if (!chip) {
+      setStatusMessage(`Chip ${chipId} was not found.`);
+      return;
+    }
+
+    const placedInstances = circuit.nodes.filter((node) => node.nodeType === 'CHIP' && node.chipRefId === chipId);
+    if (placedInstances.length > 0 && typeof window !== 'undefined') {
+      const confirmed = window.confirm(
+        `Delete ${chip.name} from the chip library?\n\n${placedInstances.length} placed instance(s) on the workspace will remain, but they will show as missing until you re-import or recreate this chip.`,
+      );
+      if (!confirmed) {
+        setStatusMessage(`Kept ${chip.name} in the chip library.`);
+        return;
+      }
+    }
+
+    setChipLibrary((previous) => previous.filter((entry) => entry.id !== chipId));
+    if (editingChipId === chipId) {
+      setEditingChipId(null);
+      setChipIdDraft('');
+      setChipNameDraft('');
+      setChipPinDrafts([]);
+      setChipAppearanceDraft(DEFAULT_CHIP_APPEARANCE);
+      setChipVisualDrafts([]);
+      setSuppressedAutoVisualKeys([]);
+    }
+    setStatusMessage(`Deleted ${chip.name} (${chip.id}) from the chip library.`);
   };
 
   const addChipPinDraft = () => {
@@ -1177,12 +1535,167 @@ export default function App() {
     );
   };
 
+  const addChipVisual = (type: ChipVisualElementType) => {
+    setChipVisualDrafts((previous) => [...previous, createVisualElement(type, previous.length)]);
+  };
+
+  const addSevenSegmentVisualPreset = () => {
+    setChipVisualDrafts(
+      createSevenSegmentPreset(
+        chipVisualOutputPins,
+        chipVisualSourceOptions.map((source) => ({
+          nodeId: source.nodeId,
+          pinId: source.pinId,
+          label: source.label,
+        })),
+      ),
+    );
+    setChipAppearanceDraft((previous) => ({
+      ...previous,
+      shape: 'seven-segment',
+      symbol: previous.symbol === 'CHIP' ? '7SEG' : previous.symbol,
+    }));
+    setStatusMessage('Added seven-segment visual preset. Bind any unmatched bars to public output pins.');
+  };
+
+  const importNestedChipVisuals = () => {
+    const nextVisualDrafts = mergeNestedChipVisualElements({
+      circuit: designerSourceCircuit,
+      chipLibrary,
+      existing: chipVisualDrafts,
+      suppressedAutoKeys: new Set(),
+    });
+    const added = nextVisualDrafts.length - chipVisualDrafts.length;
+    setSuppressedAutoVisualKeys((previous) => previous.filter((key) => !key.startsWith('nested:')));
+    setChipVisualDrafts(nextVisualDrafts);
+    setStatusMessage(
+      added > 0
+        ? `Pulled ${added} face element(s) from visual chip(s) placed in the workspace.`
+        : 'No new nested chip face elements were found to pull in.',
+    );
+  };
+
+  const updateChipVisual = (visualId: string, patch: Partial<ChipVisualElement>) => {
+    const rebindingVisual =
+      'type' in patch
+      || 'bindingPinId' in patch
+      || 'sourceNodeId' in patch
+      || 'sourcePinId' in patch;
+    setChipVisualDrafts((previous) =>
+      {
+        const target = previous.find((visual) => visual.id === visualId);
+        if (!target) {
+          return previous;
+        }
+
+        const movingGroup =
+          target.groupId
+          && (typeof patch.x === 'number' || typeof patch.y === 'number')
+          && !rebindingVisual;
+        if (movingGroup) {
+          const nextX = typeof patch.x === 'number' ? patch.x : target.x;
+          const nextY = typeof patch.y === 'number' ? patch.y : target.y;
+          const deltaX = nextX - target.x;
+          const deltaY = nextY - target.y;
+          return previous.map((visual) =>
+            visual.groupId === target.groupId
+              ? {
+                  ...visual,
+                  x: clamp(visual.x + deltaX, 2, 98),
+                  y: clamp(visual.y + deltaY, 2, 98),
+                }
+              : visual,
+          );
+        }
+
+        return previous.map((visual) =>
+          visual.id === visualId
+            ? { ...visual, ...(rebindingVisual ? { autoKey: undefined } : {}), ...patch }
+            : visual,
+        );
+      },
+    );
+  };
+
+  const scaleChipVisualGroup = (groupId: string, scaleFactor: number) => {
+    const factor = Number.isFinite(scaleFactor) ? clamp(scaleFactor, 0.1, 5) : 1;
+    const currentMembers = chipVisualDrafts.filter((visual) => visual.groupId === groupId);
+    if (currentMembers.length === 0) {
+      setStatusMessage(`No face group ${groupId} was found.`);
+      return;
+    }
+
+    const groupLabel = currentMembers.find((visual) => visual.groupLabel)?.groupLabel ?? groupId;
+    setChipVisualDrafts((previous) => {
+      const members = previous.filter((visual) => visual.groupId === groupId);
+      if (members.length === 0) {
+        return previous;
+      }
+
+      const left = Math.min(...members.map((visual) => visual.x - visual.width / 2));
+      const right = Math.max(...members.map((visual) => visual.x + visual.width / 2));
+      const top = Math.min(...members.map((visual) => visual.y - visual.height / 2));
+      const bottom = Math.max(...members.map((visual) => visual.y + visual.height / 2));
+      const centerX = (left + right) / 2;
+      const centerY = (top + bottom) / 2;
+      const scaledMembers = members.map((visual) => ({
+        id: visual.id,
+        x: centerX + (visual.x - centerX) * factor,
+        y: centerY + (visual.y - centerY) * factor,
+        width: clamp(visual.width * factor, 2, 95),
+        height: clamp(visual.height * factor, 2, 95),
+      }));
+      const scaledLeft = Math.min(...scaledMembers.map((visual) => visual.x - visual.width / 2));
+      const scaledRight = Math.max(...scaledMembers.map((visual) => visual.x + visual.width / 2));
+      const scaledTop = Math.min(...scaledMembers.map((visual) => visual.y - visual.height / 2));
+      const scaledBottom = Math.max(...scaledMembers.map((visual) => visual.y + visual.height / 2));
+      let shiftX = scaledLeft < 2 ? 2 - scaledLeft : 0;
+      let shiftY = scaledTop < 2 ? 2 - scaledTop : 0;
+      if (scaledRight + shiftX > 98) {
+        shiftX = 98 - scaledRight;
+      }
+      if (scaledBottom + shiftY > 98) {
+        shiftY = 98 - scaledBottom;
+      }
+      const scaledById = new Map(scaledMembers.map((visual) => [visual.id, visual]));
+
+      return previous.map((visual) => {
+        const scaled = scaledById.get(visual.id);
+        if (!scaled) {
+          return visual;
+        }
+
+        return {
+          ...visual,
+          x: clamp(scaled.x + shiftX, 2, 98),
+          y: clamp(scaled.y + shiftY, 2, 98),
+          width: scaled.width,
+          height: scaled.height,
+        };
+      });
+    });
+    setStatusMessage(`Scaled ${groupLabel} face group by ${Math.round(factor * 100)}%.`);
+  };
+
+  const removeChipVisual = (visualId: string) => {
+    const visual = chipVisualDrafts.find((entry) => entry.id === visualId);
+    const key = visual ? autoVisualKey(visual) : null;
+    if (key) {
+      setSuppressedAutoVisualKeys((previous) =>
+        previous.includes(key) ? previous : [...previous, key],
+      );
+    }
+    setChipVisualDrafts((previous) => previous.filter((visual) => visual.id !== visualId));
+  };
+
   const resetChipDesigner = () => {
     setEditingChipId(null);
     setChipIdDraft('chip_tff_demo');
     setChipNameDraft('T Flip-Flop Demo Chip');
     setChipPinDrafts(buildPinDraftsFromCircuit(circuit, []));
     setChipAppearanceDraft(DEFAULT_CHIP_APPEARANCE);
+    setChipVisualDrafts([]);
+    setSuppressedAutoVisualKeys([]);
     setStatusMessage('Reset chip designer to current workspace pin defaults.');
   };
 
@@ -1210,6 +1723,62 @@ export default function App() {
 
     setExportPreview(JSON.stringify(preview, null, 2));
     setStatusMessage(`Found ${result.results.length} seeded part matches via DigiKey adapter.`);
+  };
+
+  const importTruthTableText = (payload = truthTableImportDraft, sourceName = 'pasted truth table') => {
+    try {
+      const result = buildCircuitFromTruthTableText(payload, sourceName);
+      const nextPositions = Object.fromEntries(result.circuit.nodes.map((node) => [node.id, node.position]));
+      const warningSuffix =
+        result.summary.warnings.length > 0 ? ` ${result.summary.warnings.length} warning(s); see preview.` : '';
+
+      setRunning(false);
+      setCircuit(result.circuit);
+      setNodePositions(nextPositions);
+      setWorkspaceSize(result.workspaceSize);
+      setSelectedNodeId(null);
+      setSelectedWireId(null);
+      setPendingWireSource(null);
+      setExportPreview(result.preview);
+      setStatusMessage(
+        `Built ${result.summary.nodeCount} node(s) and ${result.summary.wireCount} wire(s) from ${result.summary.rowCount} truth-table row(s).${warningSuffix}`,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown truth-table import error.';
+      setStatusMessage(`Truth table import failed: ${message}`);
+      setExportPreview(`Truth table import failed:\n\n${message}`);
+    }
+  };
+
+  const importTruthTableFile = async (file: File) => {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    if (isNativeLogicFridayBinary(bytes)) {
+      try {
+        const result = buildCircuitFromLogicFridayBytes(bytes, file.name);
+        const nextPositions = Object.fromEntries(result.circuit.nodes.map((node) => [node.id, node.position]));
+
+        setRunning(false);
+        setCircuit(result.circuit);
+        setNodePositions(nextPositions);
+        setWorkspaceSize(result.workspaceSize);
+        setSelectedNodeId(null);
+        setSelectedWireId(null);
+        setPendingWireSource(null);
+        setExportPreview(result.preview);
+        setStatusMessage(
+          `Recovered ${result.summary.outputCount} Logic Friday equation(s) from ${file.name} and built ${result.summary.nodeCount} node(s).`,
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown native Logic Friday import error.';
+        setStatusMessage(`Native .lfcn import failed: ${message}`);
+        setExportPreview(`Native .lfcn import failed:\n\n${message}`);
+      }
+      return;
+    }
+
+    const payload = new TextDecoder('utf-8').decode(bytes);
+    setTruthTableImportDraft(payload);
+    importTruthTableText(payload, file.name);
   };
 
   return (
@@ -1246,10 +1815,18 @@ export default function App() {
             </button>
             <button
               type="button"
+              onClick={clearWorkspace}
+              className="rounded-md border border-[#7a4a20] bg-[#2d1b0d] px-3 py-2 text-[#ffd28a] hover:border-signalHot"
+              title="Remove all nodes and wires from the current workspace without deleting the chip library."
+            >
+              Clear Workspace
+            </button>
+            <button
+              type="button"
               onClick={startNewChipDesigner}
               className="rounded-md border border-panelBorder bg-[#06233d] px-3 py-2 hover:border-accent"
             >
-              New Chip
+              New Empty Chip
             </button>
             <button
               type="button"
@@ -1312,8 +1889,8 @@ export default function App() {
           Canvas W
           <input
             type="number"
-            min={MIN_WORKSPACE_WIDTH}
-            max={3200}
+            min={WORKSPACE_MIN_WIDTH}
+            max={WORKSPACE_MAX_WIDTH}
             value={workspaceSize.width}
             onChange={(event) => {
               const next = Number(event.target.value);
@@ -1322,7 +1899,7 @@ export default function App() {
               }
               setWorkspaceSize((previous) => ({
                 ...previous,
-                width: clamp(Math.round(next), MIN_WORKSPACE_WIDTH, 3200),
+                width: clamp(Math.round(next), WORKSPACE_MIN_WIDTH, WORKSPACE_MAX_WIDTH),
               }));
             }}
             className="ml-2 w-20 rounded border border-panelBorder bg-[#031a30] px-1 py-[1px] text-slate-100"
@@ -1332,8 +1909,8 @@ export default function App() {
           Canvas H
           <input
             type="number"
-            min={MIN_WORKSPACE_HEIGHT}
-            max={2000}
+            min={WORKSPACE_MIN_HEIGHT}
+            max={WORKSPACE_MAX_HEIGHT}
             value={workspaceSize.height}
             onChange={(event) => {
               const next = Number(event.target.value);
@@ -1342,13 +1919,20 @@ export default function App() {
               }
               setWorkspaceSize((previous) => ({
                 ...previous,
-                height: clamp(Math.round(next), MIN_WORKSPACE_HEIGHT, 2000),
+                height: clamp(Math.round(next), WORKSPACE_MIN_HEIGHT, WORKSPACE_MAX_HEIGHT),
               }));
             }}
             className="ml-2 w-20 rounded border border-panelBorder bg-[#031a30] px-1 py-[1px] text-slate-100"
           />
         </label>
       </section>
+
+      <TruthTableImportPanel
+        importDraft={truthTableImportDraft}
+        onImportDraftChange={setTruthTableImportDraft}
+        onImportText={() => importTruthTableText()}
+        onImportFile={importTruthTableFile}
+      />
 
       <section className="grid flex-1 gap-4 lg:grid-cols-[280px_minmax(0,1fr)_320px]">
         <ComponentPalette
@@ -1391,10 +1975,9 @@ export default function App() {
           onToggleInputNode={toggleInputNode}
           onUpdateNodeLabel={updateNodeLabel}
           onUpdateClockFrequency={updateClockFrequency}
-          onUpdateChipInstanceSize={updateChipInstanceSize}
+          onUpdateNodeSize={updateNodeSize}
           onLoadChipIntoDesigner={loadChipIntoDesigner}
           clockTick={snapshot.tick}
-          clockRunning={running}
           clockInfo={nextClockTransitions}
         />
       </section>
@@ -1408,6 +1991,9 @@ export default function App() {
         chipPinSourceOptions={chipPinSourceOptions}
         chipDesignerWarning={chipDesignerWarning}
         chipAppearanceDraft={chipAppearanceDraft}
+        chipVisualDrafts={chipVisualDrafts}
+        chipVisualOutputPins={chipVisualOutputPins}
+        chipVisualSourceOptions={chipVisualSourceOptions}
         onChipIdDraftChange={(value) => {
           setChipIdDraft(value);
           if (editingChipId && value !== editingChipId) {
@@ -1419,18 +2005,28 @@ export default function App() {
         onAddChipPinDraft={addChipPinDraft}
         onRemoveChipPinDraft={removeChipPinDraft}
         onChipAppearanceDraftChange={(patch) => setChipAppearanceDraft((previous) => ({ ...previous, ...patch }))}
+        onAddChipVisual={addChipVisual}
+        onAddSevenSegmentVisualPreset={addSevenSegmentVisualPreset}
+        onImportNestedChipVisuals={importNestedChipVisuals}
+        onUpdateChipVisual={updateChipVisual}
+        onScaleChipVisualGroup={scaleChipVisualGroup}
+        onRemoveChipVisual={removeChipVisual}
         onStartNewChip={startNewChipDesigner}
         onCreateChip={createChip}
         onClearLibrary={clearChipLibrary}
+        onExportChipLibrary={exportChipLibraryJson}
         onAddChipToWorkspace={addChipInstance}
         onEditChip={loadChipIntoDesigner}
         onExportChipJson={exportChipJsonToClipboard}
+        onDeleteChip={deleteChipFromLibrary}
         onImportChipJson={importChipJson}
         onResetDesigner={resetChipDesigner}
       />
 
       <StatusPanel
         tick={snapshot.tick}
+        timeSeconds={snapshot.timeSeconds}
+        simulationStepSeconds={simulationStepSeconds}
         running={running}
         ledSignal={ledSignal}
         clockInfo={nextClockTransitions}

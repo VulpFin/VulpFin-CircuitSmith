@@ -16,6 +16,7 @@ export interface BuiltChipPins {
     string,
     {
       sourceNodeId?: string;
+      sourcePinId?: string;
       direction: PinDirection;
     }
   >;
@@ -112,6 +113,7 @@ export function buildChipPinsFromDrafts(drafts: ChipPinDraft[]): BuiltChipPins {
     };
     pinBindings[uniqueId] = {
       sourceNodeId: draft.sourceNodeId,
+      sourcePinId: draft.sourcePinId,
       direction: draft.direction,
     };
   }

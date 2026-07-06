@@ -1,0 +1,1276 @@
+[
+  {
+    "id": "bin_to_dec",
+    "name": "BCD",
+    "version": "0.1.0",
+    "publicPins": [
+      {
+        "id": "IN1",
+        "name": "IN1",
+        "direction": "input"
+      },
+      {
+        "id": "IN2",
+        "name": "IN2",
+        "direction": "input"
+      },
+      {
+        "id": "IN3",
+        "name": "IN3",
+        "direction": "input"
+      },
+      {
+        "id": "IN4",
+        "name": "IN4",
+        "direction": "input"
+      },
+      {
+        "id": "IN5",
+        "name": "IN5",
+        "direction": "input"
+      },
+      {
+        "id": "IN6",
+        "name": "IN6",
+        "direction": "input"
+      },
+      {
+        "id": "IN7",
+        "name": "IN7",
+        "direction": "input"
+      },
+      {
+        "id": "IN8",
+        "name": "IN8",
+        "direction": "input"
+      }
+    ],
+    "internalCircuit": {
+      "id": "bin_to_dec_internal",
+      "name": "BCD Display Wrapper",
+      "description": "8-bit binary to three decimal digits using double dabble and embedded seven-segment display faces.",
+      "nodes": [
+        {
+          "id": "chip_1",
+          "nodeType": "CHIP",
+          "label": "DOUBLE DABBLE",
+          "position": {
+            "x": 185,
+            "y": 339
+          },
+          "chipRefId": "double_dabble",
+          "parameters": {
+            "appearance": {
+              "shape": "rect",
+              "bodyColor": "#0b0d0e",
+              "accentColor": "#3bd5ff",
+              "textColor": "#d8ecff",
+              "symbol": "DD"
+            },
+            "pinLayout": {
+              "IN1": {
+                "x": 5,
+                "y": 10
+              },
+              "IN2": {
+                "x": 5,
+                "y": 21.4
+              },
+              "IN3": {
+                "x": 5,
+                "y": 32.9
+              },
+              "IN4": {
+                "x": 5,
+                "y": 44.3
+              },
+              "IN5": {
+                "x": 5,
+                "y": 55.7
+              },
+              "IN6": {
+                "x": 5,
+                "y": 67.1
+              },
+              "IN7": {
+                "x": 5,
+                "y": 78.6
+              },
+              "IN8": {
+                "x": 5,
+                "y": 90
+              },
+              "OUT1": {
+                "x": 95,
+                "y": 8
+              },
+              "OUT2": {
+                "x": 95,
+                "y": 15.6
+              },
+              "OUT3": {
+                "x": 95,
+                "y": 23.3
+              },
+              "OUT4": {
+                "x": 95,
+                "y": 30.9
+              },
+              "OUT5": {
+                "x": 95,
+                "y": 38.5
+              },
+              "OUT6": {
+                "x": 95,
+                "y": 46.2
+              },
+              "OUT7": {
+                "x": 95,
+                "y": 53.8
+              },
+              "OUT8": {
+                "x": 95,
+                "y": 61.5
+              },
+              "OUT9": {
+                "x": 95,
+                "y": 69.1
+              },
+              "OUT10": {
+                "x": 95,
+                "y": 76.7
+              },
+              "OUT11": {
+                "x": 95,
+                "y": 84.4
+              },
+              "OUT12": {
+                "x": 95,
+                "y": 92
+              }
+            },
+            "pinBindings": {
+              "IN1": {
+                "sourceNodeId": "input_1",
+                "direction": "input"
+              },
+              "IN2": {
+                "sourceNodeId": "input_2",
+                "direction": "input"
+              },
+              "IN3": {
+                "sourceNodeId": "input_3",
+                "direction": "input"
+              },
+              "IN4": {
+                "sourceNodeId": "input_4",
+                "direction": "input"
+              },
+              "IN5": {
+                "sourceNodeId": "input_5",
+                "direction": "input"
+              },
+              "IN6": {
+                "sourceNodeId": "input_6",
+                "direction": "input"
+              },
+              "IN7": {
+                "sourceNodeId": "input_7",
+                "direction": "input"
+              },
+              "IN8": {
+                "sourceNodeId": "input_8",
+                "direction": "input"
+              },
+              "OUT1": {
+                "sourceNodeId": "output_1",
+                "direction": "output"
+              },
+              "OUT2": {
+                "sourceNodeId": "output_2",
+                "direction": "output"
+              },
+              "OUT3": {
+                "sourceNodeId": "output_3",
+                "direction": "output"
+              },
+              "OUT4": {
+                "sourceNodeId": "output_4",
+                "direction": "output"
+              },
+              "OUT5": {
+                "sourceNodeId": "output_5",
+                "direction": "output"
+              },
+              "OUT6": {
+                "sourceNodeId": "output_6",
+                "direction": "output"
+              },
+              "OUT7": {
+                "sourceNodeId": "output_7",
+                "direction": "output"
+              },
+              "OUT8": {
+                "sourceNodeId": "output_8",
+                "direction": "output"
+              },
+              "OUT9": {
+                "sourceNodeId": "output_9",
+                "direction": "output"
+              },
+              "OUT10": {
+                "sourceNodeId": "output_10",
+                "direction": "output"
+              },
+              "OUT11": {
+                "sourceNodeId": "output_11",
+                "direction": "output"
+              },
+              "OUT12": {
+                "sourceNodeId": "output_12",
+                "direction": "output"
+              }
+            }
+          }
+        },
+        {
+          "id": "input_1",
+          "nodeType": "INPUT",
+          "label": "IN1",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "state": {
+            "value": "0"
+          }
+        },
+        {
+          "id": "input_2",
+          "nodeType": "INPUT",
+          "label": "IN2",
+          "position": {
+            "x": 0,
+            "y": 77
+          },
+          "state": {
+            "value": "0"
+          }
+        },
+        {
+          "id": "input_3",
+          "nodeType": "INPUT",
+          "label": "IN3",
+          "position": {
+            "x": 0,
+            "y": 154
+          },
+          "state": {
+            "value": "0"
+          }
+        },
+        {
+          "id": "input_4",
+          "nodeType": "INPUT",
+          "label": "IN4",
+          "position": {
+            "x": 0,
+            "y": 231
+          },
+          "state": {
+            "value": "0"
+          }
+        },
+        {
+          "id": "input_5",
+          "nodeType": "INPUT",
+          "label": "IN5",
+          "position": {
+            "x": 0,
+            "y": 308
+          },
+          "state": {
+            "value": "0"
+          }
+        },
+        {
+          "id": "input_6",
+          "nodeType": "INPUT",
+          "label": "IN6",
+          "position": {
+            "x": 0,
+            "y": 385
+          },
+          "state": {
+            "value": "0"
+          }
+        },
+        {
+          "id": "input_7",
+          "nodeType": "INPUT",
+          "label": "IN7",
+          "position": {
+            "x": 0,
+            "y": 462
+          },
+          "state": {
+            "value": "0"
+          }
+        },
+        {
+          "id": "input_8",
+          "nodeType": "INPUT",
+          "label": "IN8",
+          "position": {
+            "x": 0,
+            "y": 539
+          },
+          "state": {
+            "value": "0"
+          }
+        },
+        {
+          "id": "dot_off",
+          "nodeType": "GND",
+          "label": "DOT OFF",
+          "position": {
+            "x": 300,
+            "y": 235
+          }
+        },
+        {
+          "id": "chip_2",
+          "nodeType": "CHIP",
+          "label": "7 Segment Display With Hex Driver",
+          "position": {
+            "x": 391,
+            "y": 120
+          },
+          "chipRefId": "15_segment_with_hex_driver",
+          "parameters": {
+            "appearance": {
+              "shape": "seven-segment",
+              "bodyColor": "#000000",
+              "accentColor": "#001eff",
+              "textColor": "#d8ecff",
+              "symbol": "7SEG"
+            },
+            "pinLayout": {
+              "I0": {
+                "x": 5,
+                "y": 15
+              },
+              "I1": {
+                "x": 5,
+                "y": 27
+              },
+              "I2": {
+                "x": 5,
+                "y": 39
+              },
+              "I3": {
+                "x": 5,
+                "y": 51
+              },
+              "DOT": {
+                "x": 5,
+                "y": 63
+              }
+            },
+            "pinBindings": {
+              "I0": {
+                "sourceNodeId": "input_1",
+                "direction": "input"
+              },
+              "I1": {
+                "sourceNodeId": "input_2",
+                "direction": "input"
+              },
+              "I2": {
+                "sourceNodeId": "input_3",
+                "direction": "input"
+              },
+              "I3": {
+                "sourceNodeId": "input_4",
+                "direction": "input"
+              },
+              "DOT": {
+                "sourceNodeId": "input_5",
+                "direction": "input"
+              }
+            },
+            "width": 136,
+            "height": 78
+          }
+        },
+        {
+          "id": "chip_3",
+          "nodeType": "CHIP",
+          "label": "7 Segment Display With Hex Driver",
+          "position": {
+            "x": 530,
+            "y": 122
+          },
+          "chipRefId": "15_segment_with_hex_driver",
+          "parameters": {
+            "appearance": {
+              "shape": "seven-segment",
+              "bodyColor": "#000000",
+              "accentColor": "#001eff",
+              "textColor": "#d8ecff",
+              "symbol": "7SEG"
+            },
+            "pinLayout": {
+              "I0": {
+                "x": 5,
+                "y": 15
+              },
+              "I1": {
+                "x": 5,
+                "y": 27
+              },
+              "I2": {
+                "x": 5,
+                "y": 39
+              },
+              "I3": {
+                "x": 5,
+                "y": 51
+              },
+              "DOT": {
+                "x": 5,
+                "y": 63
+              }
+            },
+            "pinBindings": {
+              "I0": {
+                "sourceNodeId": "input_1",
+                "direction": "input"
+              },
+              "I1": {
+                "sourceNodeId": "input_2",
+                "direction": "input"
+              },
+              "I2": {
+                "sourceNodeId": "input_3",
+                "direction": "input"
+              },
+              "I3": {
+                "sourceNodeId": "input_4",
+                "direction": "input"
+              },
+              "DOT": {
+                "sourceNodeId": "input_5",
+                "direction": "input"
+              }
+            },
+            "width": 136,
+            "height": 78
+          }
+        },
+        {
+          "id": "chip_4",
+          "nodeType": "CHIP",
+          "label": "7 Segment Display With Hex Driver",
+          "position": {
+            "x": 669,
+            "y": 123
+          },
+          "chipRefId": "15_segment_with_hex_driver",
+          "parameters": {
+            "appearance": {
+              "shape": "seven-segment",
+              "bodyColor": "#000000",
+              "accentColor": "#001eff",
+              "textColor": "#d8ecff",
+              "symbol": "7SEG"
+            },
+            "pinLayout": {
+              "I0": {
+                "x": 5,
+                "y": 15
+              },
+              "I1": {
+                "x": 5,
+                "y": 27
+              },
+              "I2": {
+                "x": 5,
+                "y": 39
+              },
+              "I3": {
+                "x": 5,
+                "y": 51
+              },
+              "DOT": {
+                "x": 5,
+                "y": 63
+              }
+            },
+            "pinBindings": {
+              "I0": {
+                "sourceNodeId": "input_1",
+                "direction": "input"
+              },
+              "I1": {
+                "sourceNodeId": "input_2",
+                "direction": "input"
+              },
+              "I2": {
+                "sourceNodeId": "input_3",
+                "direction": "input"
+              },
+              "I3": {
+                "sourceNodeId": "input_4",
+                "direction": "input"
+              },
+              "DOT": {
+                "sourceNodeId": "input_5",
+                "direction": "input"
+              }
+            },
+            "width": 136,
+            "height": 78
+          }
+        }
+      ],
+      "wires": [
+        {
+          "id": "wire_1",
+          "from": {
+            "nodeId": "input_1",
+            "pinId": "OUT"
+          },
+          "to": {
+            "nodeId": "chip_1",
+            "pinId": "IN1"
+          }
+        },
+        {
+          "id": "wire_2",
+          "from": {
+            "nodeId": "input_2",
+            "pinId": "OUT"
+          },
+          "to": {
+            "nodeId": "chip_1",
+            "pinId": "IN2"
+          }
+        },
+        {
+          "id": "wire_3",
+          "from": {
+            "nodeId": "input_3",
+            "pinId": "OUT"
+          },
+          "to": {
+            "nodeId": "chip_1",
+            "pinId": "IN3"
+          }
+        },
+        {
+          "id": "wire_4",
+          "from": {
+            "nodeId": "input_4",
+            "pinId": "OUT"
+          },
+          "to": {
+            "nodeId": "chip_1",
+            "pinId": "IN4"
+          }
+        },
+        {
+          "id": "wire_5",
+          "from": {
+            "nodeId": "input_5",
+            "pinId": "OUT"
+          },
+          "to": {
+            "nodeId": "chip_1",
+            "pinId": "IN5"
+          }
+        },
+        {
+          "id": "wire_6",
+          "from": {
+            "nodeId": "input_6",
+            "pinId": "OUT"
+          },
+          "to": {
+            "nodeId": "chip_1",
+            "pinId": "IN6"
+          }
+        },
+        {
+          "id": "wire_7",
+          "from": {
+            "nodeId": "input_7",
+            "pinId": "OUT"
+          },
+          "to": {
+            "nodeId": "chip_1",
+            "pinId": "IN7"
+          }
+        },
+        {
+          "id": "wire_8",
+          "from": {
+            "nodeId": "input_8",
+            "pinId": "OUT"
+          },
+          "to": {
+            "nodeId": "chip_1",
+            "pinId": "IN8"
+          }
+        },
+        {
+          "id": "wire_9",
+          "from": {
+            "nodeId": "chip_1",
+            "pinId": "OUT1"
+          },
+          "to": {
+            "nodeId": "chip_2",
+            "pinId": "I3"
+          }
+        },
+        {
+          "id": "wire_10",
+          "from": {
+            "nodeId": "chip_1",
+            "pinId": "OUT2"
+          },
+          "to": {
+            "nodeId": "chip_2",
+            "pinId": "I2"
+          }
+        },
+        {
+          "id": "wire_11",
+          "from": {
+            "nodeId": "chip_1",
+            "pinId": "OUT3"
+          },
+          "to": {
+            "nodeId": "chip_2",
+            "pinId": "I1"
+          }
+        },
+        {
+          "id": "wire_12",
+          "from": {
+            "nodeId": "chip_1",
+            "pinId": "OUT4"
+          },
+          "to": {
+            "nodeId": "chip_2",
+            "pinId": "I0"
+          }
+        },
+        {
+          "id": "wire_13",
+          "from": {
+            "nodeId": "dot_off",
+            "pinId": "OUT"
+          },
+          "to": {
+            "nodeId": "chip_2",
+            "pinId": "DOT"
+          }
+        },
+        {
+          "id": "wire_14",
+          "from": {
+            "nodeId": "chip_1",
+            "pinId": "OUT5"
+          },
+          "to": {
+            "nodeId": "chip_3",
+            "pinId": "I3"
+          }
+        },
+        {
+          "id": "wire_15",
+          "from": {
+            "nodeId": "chip_1",
+            "pinId": "OUT6"
+          },
+          "to": {
+            "nodeId": "chip_3",
+            "pinId": "I2"
+          }
+        },
+        {
+          "id": "wire_16",
+          "from": {
+            "nodeId": "chip_1",
+            "pinId": "OUT7"
+          },
+          "to": {
+            "nodeId": "chip_3",
+            "pinId": "I1"
+          }
+        },
+        {
+          "id": "wire_17",
+          "from": {
+            "nodeId": "chip_1",
+            "pinId": "OUT8"
+          },
+          "to": {
+            "nodeId": "chip_3",
+            "pinId": "I0"
+          }
+        },
+        {
+          "id": "wire_18",
+          "from": {
+            "nodeId": "dot_off",
+            "pinId": "OUT"
+          },
+          "to": {
+            "nodeId": "chip_3",
+            "pinId": "DOT"
+          }
+        },
+        {
+          "id": "wire_19",
+          "from": {
+            "nodeId": "chip_1",
+            "pinId": "OUT9"
+          },
+          "to": {
+            "nodeId": "chip_4",
+            "pinId": "I3"
+          }
+        },
+        {
+          "id": "wire_20",
+          "from": {
+            "nodeId": "chip_1",
+            "pinId": "OUT10"
+          },
+          "to": {
+            "nodeId": "chip_4",
+            "pinId": "I2"
+          }
+        },
+        {
+          "id": "wire_21",
+          "from": {
+            "nodeId": "chip_1",
+            "pinId": "OUT11"
+          },
+          "to": {
+            "nodeId": "chip_4",
+            "pinId": "I1"
+          }
+        },
+        {
+          "id": "wire_22",
+          "from": {
+            "nodeId": "chip_1",
+            "pinId": "OUT12"
+          },
+          "to": {
+            "nodeId": "chip_4",
+            "pinId": "I0"
+          }
+        },
+        {
+          "id": "wire_23",
+          "from": {
+            "nodeId": "dot_off",
+            "pinId": "OUT"
+          },
+          "to": {
+            "nodeId": "chip_4",
+            "pinId": "DOT"
+          }
+        }
+      ],
+      "nets": [],
+      "metadata": {
+        "generatedBy": "vfcs-bcd-display-wrapper",
+        "sourceName": "recovered from pasted BCD display export",
+        "displayOrder": [
+          "hundreds",
+          "tens",
+          "ones"
+        ]
+      }
+    },
+    "metadata": {
+      "generatedBy": "vfcs-bcd-display-wrapper",
+      "generatedAt": "2026-07-05T22:47:36.613Z",
+      "status": "visual-wrapper",
+      "appearance": {
+        "shape": "rect",
+        "bodyColor": "#071018",
+        "accentColor": "#3bd5ff",
+        "textColor": "#d8ecff",
+        "symbol": "BCD"
+      },
+      "pinLayout": {
+        "IN1": {
+          "x": 5,
+          "y": 10
+        },
+        "IN2": {
+          "x": 5,
+          "y": 21.4
+        },
+        "IN3": {
+          "x": 5,
+          "y": 32.9
+        },
+        "IN4": {
+          "x": 5,
+          "y": 44.3
+        },
+        "IN5": {
+          "x": 5,
+          "y": 55.7
+        },
+        "IN6": {
+          "x": 5,
+          "y": 67.1
+        },
+        "IN7": {
+          "x": 5,
+          "y": 78.6
+        },
+        "IN8": {
+          "x": 5,
+          "y": 90
+        }
+      },
+      "pinBindings": {
+        "IN1": {
+          "sourceNodeId": "input_1",
+          "direction": "input"
+        },
+        "IN2": {
+          "sourceNodeId": "input_2",
+          "direction": "input"
+        },
+        "IN3": {
+          "sourceNodeId": "input_3",
+          "direction": "input"
+        },
+        "IN4": {
+          "sourceNodeId": "input_4",
+          "direction": "input"
+        },
+        "IN5": {
+          "sourceNodeId": "input_5",
+          "direction": "input"
+        },
+        "IN6": {
+          "sourceNodeId": "input_6",
+          "direction": "input"
+        },
+        "IN7": {
+          "sourceNodeId": "input_7",
+          "direction": "input"
+        },
+        "IN8": {
+          "sourceNodeId": "input_8",
+          "direction": "input"
+        }
+      },
+      "visualElements": [
+        {
+          "id": "nested_chip_2_segment_a_e0kms",
+          "type": "segment",
+          "x": 15.202,
+          "y": 43.772,
+          "width": 10.884,
+          "height": 2,
+          "rotation": 0,
+          "color": "#ff3b30",
+          "offColor": "#2a1010",
+          "sourceNodeId": "chip_2",
+          "sourcePinId": "__visual_segment_a_e0kms",
+          "autoKey": "nested:chip_2:segment_a_e0kms",
+          "groupId": "chip-face:chip_2",
+          "groupLabel": "7 Segment Display With Hex Driver"
+        },
+        {
+          "id": "nested_chip_2_segment_b_lazaw",
+          "type": "segment",
+          "x": 21.284,
+          "y": 46.709,
+          "width": 2.241,
+          "height": 4.957,
+          "rotation": 0,
+          "color": "#ff3b30",
+          "offColor": "#2a1010",
+          "sourceNodeId": "chip_2",
+          "sourcePinId": "__visual_segment_b_lazaw",
+          "autoKey": "nested:chip_2:segment_b_lazaw",
+          "groupId": "chip-face:chip_2",
+          "groupLabel": "7 Segment Display With Hex Driver"
+        },
+        {
+          "id": "nested_chip_2_segment_c_righm",
+          "type": "segment",
+          "x": 21.284,
+          "y": 52.584,
+          "width": 2.241,
+          "height": 4.957,
+          "rotation": 0,
+          "color": "#ff3b30",
+          "offColor": "#2a1010",
+          "sourceNodeId": "chip_2",
+          "sourcePinId": "__visual_segment_c_righm",
+          "autoKey": "nested:chip_2:segment_c_righm",
+          "groupId": "chip-face:chip_2",
+          "groupLabel": "7 Segment Display With Hex Driver"
+        },
+        {
+          "id": "nested_chip_2_segment_d_gtg0m",
+          "type": "segment",
+          "x": 15.202,
+          "y": 55.522,
+          "width": 10.884,
+          "height": 2,
+          "rotation": 0,
+          "color": "#ff3b30",
+          "offColor": "#2a1010",
+          "sourceNodeId": "chip_2",
+          "sourcePinId": "__visual_segment_d_gtg0m",
+          "autoKey": "nested:chip_2:segment_d_gtg0m",
+          "groupId": "chip-face:chip_2",
+          "groupLabel": "7 Segment Display With Hex Driver"
+        },
+        {
+          "id": "nested_chip_2_segment_e_kv4by",
+          "type": "segment",
+          "x": 9.12,
+          "y": 52.584,
+          "width": 2.241,
+          "height": 4.957,
+          "rotation": 0,
+          "color": "#ff3b30",
+          "offColor": "#2a1010",
+          "sourceNodeId": "chip_2",
+          "sourcePinId": "__visual_segment_e_kv4by",
+          "autoKey": "nested:chip_2:segment_e_kv4by",
+          "groupId": "chip-face:chip_2",
+          "groupLabel": "7 Segment Display With Hex Driver"
+        },
+        {
+          "id": "nested_chip_2_segment_f_n9wgn",
+          "type": "segment",
+          "x": 9.12,
+          "y": 46.709,
+          "width": 2.241,
+          "height": 4.957,
+          "rotation": 0,
+          "color": "#ff3b30",
+          "offColor": "#2a1010",
+          "sourceNodeId": "chip_2",
+          "sourcePinId": "__visual_segment_f_n9wgn",
+          "autoKey": "nested:chip_2:segment_f_n9wgn",
+          "groupId": "chip-face:chip_2",
+          "groupLabel": "7 Segment Display With Hex Driver"
+        },
+        {
+          "id": "nested_chip_2_segment_g_66rff",
+          "type": "segment",
+          "x": 15.202,
+          "y": 49.647,
+          "width": 10.884,
+          "height": 2,
+          "rotation": 0,
+          "color": "#ff3b30",
+          "offColor": "#2a1010",
+          "sourceNodeId": "chip_2",
+          "sourcePinId": "__visual_segment_g_66rff",
+          "autoKey": "nested:chip_2:segment_g_66rff",
+          "groupId": "chip-face:chip_2",
+          "groupLabel": "7 Segment Display With Hex Driver"
+        },
+        {
+          "id": "nested_chip_2_segment_dp_bbxsd",
+          "type": "segment",
+          "x": 25.446,
+          "y": 55.338,
+          "width": 2.241,
+          "height": 2,
+          "rotation": 0,
+          "color": "#ff3b30",
+          "offColor": "#241313",
+          "sourceNodeId": "chip_2",
+          "sourcePinId": "__visual_segment_dp_bbxsd",
+          "autoKey": "nested:chip_2:segment_dp_bbxsd",
+          "groupId": "chip-face:chip_2",
+          "groupLabel": "7 Segment Display With Hex Driver"
+        },
+        {
+          "id": "nested_chip_3_segment_a_e0kms",
+          "type": "segment",
+          "x": 47.919,
+          "y": 44.243,
+          "width": 10.884,
+          "height": 2,
+          "rotation": 0,
+          "color": "#ff3b30",
+          "offColor": "#2a1010",
+          "sourceNodeId": "chip_3",
+          "sourcePinId": "__visual_segment_a_e0kms",
+          "autoKey": "nested:chip_3:segment_a_e0kms",
+          "groupId": "chip-face:chip_3",
+          "groupLabel": "7 Segment Display With Hex Driver"
+        },
+        {
+          "id": "nested_chip_3_segment_b_lazaw",
+          "type": "segment",
+          "x": 54.001,
+          "y": 47.18,
+          "width": 2.241,
+          "height": 4.957,
+          "rotation": 0,
+          "color": "#ff3b30",
+          "offColor": "#2a1010",
+          "sourceNodeId": "chip_3",
+          "sourcePinId": "__visual_segment_b_lazaw",
+          "autoKey": "nested:chip_3:segment_b_lazaw",
+          "groupId": "chip-face:chip_3",
+          "groupLabel": "7 Segment Display With Hex Driver"
+        },
+        {
+          "id": "nested_chip_3_segment_c_righm",
+          "type": "segment",
+          "x": 54.001,
+          "y": 53.055,
+          "width": 2.241,
+          "height": 4.957,
+          "rotation": 0,
+          "color": "#ff3b30",
+          "offColor": "#2a1010",
+          "sourceNodeId": "chip_3",
+          "sourcePinId": "__visual_segment_c_righm",
+          "autoKey": "nested:chip_3:segment_c_righm",
+          "groupId": "chip-face:chip_3",
+          "groupLabel": "7 Segment Display With Hex Driver"
+        },
+        {
+          "id": "nested_chip_3_segment_d_gtg0m",
+          "type": "segment",
+          "x": 47.919,
+          "y": 55.993,
+          "width": 10.884,
+          "height": 2,
+          "rotation": 0,
+          "color": "#ff3b30",
+          "offColor": "#2a1010",
+          "sourceNodeId": "chip_3",
+          "sourcePinId": "__visual_segment_d_gtg0m",
+          "autoKey": "nested:chip_3:segment_d_gtg0m",
+          "groupId": "chip-face:chip_3",
+          "groupLabel": "7 Segment Display With Hex Driver"
+        },
+        {
+          "id": "nested_chip_3_segment_e_kv4by",
+          "type": "segment",
+          "x": 41.837,
+          "y": 53.055,
+          "width": 2.241,
+          "height": 4.957,
+          "rotation": 0,
+          "color": "#ff3b30",
+          "offColor": "#2a1010",
+          "sourceNodeId": "chip_3",
+          "sourcePinId": "__visual_segment_e_kv4by",
+          "autoKey": "nested:chip_3:segment_e_kv4by",
+          "groupId": "chip-face:chip_3",
+          "groupLabel": "7 Segment Display With Hex Driver"
+        },
+        {
+          "id": "nested_chip_3_segment_f_n9wgn",
+          "type": "segment",
+          "x": 41.837,
+          "y": 47.18,
+          "width": 2.241,
+          "height": 4.957,
+          "rotation": 0,
+          "color": "#ff3b30",
+          "offColor": "#2a1010",
+          "sourceNodeId": "chip_3",
+          "sourcePinId": "__visual_segment_f_n9wgn",
+          "autoKey": "nested:chip_3:segment_f_n9wgn",
+          "groupId": "chip-face:chip_3",
+          "groupLabel": "7 Segment Display With Hex Driver"
+        },
+        {
+          "id": "nested_chip_3_segment_g_66rff",
+          "type": "segment",
+          "x": 47.919,
+          "y": 50.118,
+          "width": 10.884,
+          "height": 2,
+          "rotation": 0,
+          "color": "#ff3b30",
+          "offColor": "#2a1010",
+          "sourceNodeId": "chip_3",
+          "sourcePinId": "__visual_segment_g_66rff",
+          "autoKey": "nested:chip_3:segment_g_66rff",
+          "groupId": "chip-face:chip_3",
+          "groupLabel": "7 Segment Display With Hex Driver"
+        },
+        {
+          "id": "nested_chip_3_segment_dp_bbxsd",
+          "type": "segment",
+          "x": 58.163,
+          "y": 55.809,
+          "width": 2.241,
+          "height": 2,
+          "rotation": 0,
+          "color": "#ff3b30",
+          "offColor": "#241313",
+          "sourceNodeId": "chip_3",
+          "sourcePinId": "__visual_segment_dp_bbxsd",
+          "autoKey": "nested:chip_3:segment_dp_bbxsd",
+          "groupId": "chip-face:chip_3",
+          "groupLabel": "7 Segment Display With Hex Driver"
+        },
+        {
+          "id": "nested_chip_4_segment_a_e0kms",
+          "type": "segment",
+          "x": 80.636,
+          "y": 44.478,
+          "width": 10.884,
+          "height": 2,
+          "rotation": 0,
+          "color": "#ff3b30",
+          "offColor": "#2a1010",
+          "sourceNodeId": "chip_4",
+          "sourcePinId": "__visual_segment_a_e0kms",
+          "autoKey": "nested:chip_4:segment_a_e0kms",
+          "groupId": "chip-face:chip_4",
+          "groupLabel": "7 Segment Display With Hex Driver"
+        },
+        {
+          "id": "nested_chip_4_segment_b_lazaw",
+          "type": "segment",
+          "x": 86.718,
+          "y": 47.416,
+          "width": 2.241,
+          "height": 4.957,
+          "rotation": 0,
+          "color": "#ff3b30",
+          "offColor": "#2a1010",
+          "sourceNodeId": "chip_4",
+          "sourcePinId": "__visual_segment_b_lazaw",
+          "autoKey": "nested:chip_4:segment_b_lazaw",
+          "groupId": "chip-face:chip_4",
+          "groupLabel": "7 Segment Display With Hex Driver"
+        },
+        {
+          "id": "nested_chip_4_segment_c_righm",
+          "type": "segment",
+          "x": 86.718,
+          "y": 53.291,
+          "width": 2.241,
+          "height": 4.957,
+          "rotation": 0,
+          "color": "#ff3b30",
+          "offColor": "#2a1010",
+          "sourceNodeId": "chip_4",
+          "sourcePinId": "__visual_segment_c_righm",
+          "autoKey": "nested:chip_4:segment_c_righm",
+          "groupId": "chip-face:chip_4",
+          "groupLabel": "7 Segment Display With Hex Driver"
+        },
+        {
+          "id": "nested_chip_4_segment_d_gtg0m",
+          "type": "segment",
+          "x": 80.636,
+          "y": 56.228,
+          "width": 10.884,
+          "height": 2,
+          "rotation": 0,
+          "color": "#ff3b30",
+          "offColor": "#2a1010",
+          "sourceNodeId": "chip_4",
+          "sourcePinId": "__visual_segment_d_gtg0m",
+          "autoKey": "nested:chip_4:segment_d_gtg0m",
+          "groupId": "chip-face:chip_4",
+          "groupLabel": "7 Segment Display With Hex Driver"
+        },
+        {
+          "id": "nested_chip_4_segment_e_kv4by",
+          "type": "segment",
+          "x": 74.554,
+          "y": 53.291,
+          "width": 2.241,
+          "height": 4.957,
+          "rotation": 0,
+          "color": "#ff3b30",
+          "offColor": "#2a1010",
+          "sourceNodeId": "chip_4",
+          "sourcePinId": "__visual_segment_e_kv4by",
+          "autoKey": "nested:chip_4:segment_e_kv4by",
+          "groupId": "chip-face:chip_4",
+          "groupLabel": "7 Segment Display With Hex Driver"
+        },
+        {
+          "id": "nested_chip_4_segment_f_n9wgn",
+          "type": "segment",
+          "x": 74.554,
+          "y": 47.416,
+          "width": 2.241,
+          "height": 4.957,
+          "rotation": 0,
+          "color": "#ff3b30",
+          "offColor": "#2a1010",
+          "sourceNodeId": "chip_4",
+          "sourcePinId": "__visual_segment_f_n9wgn",
+          "autoKey": "nested:chip_4:segment_f_n9wgn",
+          "groupId": "chip-face:chip_4",
+          "groupLabel": "7 Segment Display With Hex Driver"
+        },
+        {
+          "id": "nested_chip_4_segment_g_66rff",
+          "type": "segment",
+          "x": 80.636,
+          "y": 50.353,
+          "width": 10.884,
+          "height": 2,
+          "rotation": 0,
+          "color": "#ff3b30",
+          "offColor": "#2a1010",
+          "sourceNodeId": "chip_4",
+          "sourcePinId": "__visual_segment_g_66rff",
+          "autoKey": "nested:chip_4:segment_g_66rff",
+          "groupId": "chip-face:chip_4",
+          "groupLabel": "7 Segment Display With Hex Driver"
+        },
+        {
+          "id": "nested_chip_4_segment_dp_bbxsd",
+          "type": "segment",
+          "x": 90.88,
+          "y": 56.044,
+          "width": 2.241,
+          "height": 2,
+          "rotation": 0,
+          "color": "#ff3b30",
+          "offColor": "#241313",
+          "sourceNodeId": "chip_4",
+          "sourcePinId": "__visual_segment_dp_bbxsd",
+          "autoKey": "nested:chip_4:segment_dp_bbxsd",
+          "groupId": "chip-face:chip_4",
+          "groupLabel": "7 Segment Display With Hex Driver"
+        }
+      ],
+      "fixedNotes": [
+        "Embeds three 7 Segment Display With Hex Driver chip faces as grouped visuals.",
+        "Each display group can be moved together in the chip designer.",
+        "Decimal points are tied low internally so they render as off instead of floating Z.",
+        "Visuals are bound to nested chip __visual_* outputs so they light when the packaged BCD chip is simulated."
+      ]
+    }
+  }
+]

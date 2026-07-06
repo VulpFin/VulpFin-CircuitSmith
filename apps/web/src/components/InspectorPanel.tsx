@@ -1,5 +1,6 @@
 import type { ChipDefinition, CircuitDefinition, LogicValue } from '@vfcs/circuit-model';
 import { getMappingsForLogicalType } from '@vfcs/part-mapper';
+import { nodeSize, nodeSizeBounds } from '../lib/nodeSizing.js';
 import { resolveChipPinLayout, resolveNodePins } from '../lib/nodePins.js';
 
 interface PendingWireSource {
@@ -25,16 +26,16 @@ interface InspectorPanelProps {
   onToggleInputNode: (nodeId: string) => void;
   onUpdateNodeLabel: (nodeId: string, label: string) => void;
   onUpdateClockFrequency: (nodeId: string, frequencyHz: number) => void;
-  onUpdateChipInstanceSize: (nodeId: string, width: number, height: number) => void;
+  onUpdateNodeSize: (nodeId: string, width: number, height: number) => void;
   onLoadChipIntoDesigner: (chipId: string) => void;
   clockTick: number;
-  clockRunning: boolean;
   clockInfo: Array<{
     nodeId: string;
     nextTick: number;
+    nextTimeSeconds: number;
     nextState: LogicValue;
     ticksUntilToggle: number;
-    secondsToToggle: number | null;
+    secondsToToggle: number;
   }>;
 }
 
@@ -59,10 +60,9 @@ export function InspectorPanel({
   onToggleInputNode,
   onUpdateNodeLabel,
   onUpdateClockFrequency,
-  onUpdateChipInstanceSize,
+  onUpdateNodeSize,
   onLoadChipIntoDesigner,
   clockTick,
-  clockRunning,
   clockInfo,
 }: InspectorPanelProps) {
   const node = circuit.nodes.find((entry) => entry.id === selectedNodeId) ?? null;
@@ -84,21 +84,22 @@ export function InspectorPanel({
   }
 
   const outputs = node ? nodeOutputs[node.id] ?? {} : {};
+  const visibleOutputs = Object.entries(outputs).filter(([pinId]) => !pinId.startsWith('__visual_'));
   const state = node ? nodeStates[node.id] ?? {} : {};
   const mappings = node ? getMappingsForLogicalType(node.nodeType) : [];
   const pinInfo = node ? resolveNodePins(node, chipLibrary) : { inputPins: [], outputPins: [] };
   const chipPinLayout = node ? resolveChipPinLayout(node, chipLibrary) : {};
   const selectedClockInfo = node ? clockInfo.find((entry) => entry.nodeId === node.id) : undefined;
+  const formatSeconds = (value: number): string =>
+    value >= 0.01 ? `${value.toFixed(3)}s` : `${value.toExponential(3)}s`;
 
   const currentClockHzRaw = Number(node?.parameters?.frequencyHz ?? 1);
   const currentClockHz = Number.isFinite(currentClockHzRaw)
     ? Math.min(MAX_CLOCK_HZ, Math.max(MIN_CLOCK_HZ, currentClockHzRaw))
     : 1;
 
-  const chipWidthRaw = Number(node?.parameters?.width ?? 176);
-  const chipHeightRaw = Number(node?.parameters?.height ?? 104);
-  const chipWidth = Number.isFinite(chipWidthRaw) ? chipWidthRaw : 176;
-  const chipHeight = Number.isFinite(chipHeightRaw) ? chipHeightRaw : 104;
+  const currentNodeSize = node ? nodeSize(node) : { width: 136, height: 78 };
+  const currentNodeBounds = node ? nodeSizeBounds(node) : null;
 
   return (
     <aside className="rounded-xl border border-panelBorder bg-panel/80 p-4 shadow-panelGlow backdrop-blur-sm">
@@ -175,10 +176,10 @@ export function InspectorPanel({
             <div>
               <div className="text-xs uppercase tracking-[0.15em] text-accentSoft">Signals</div>
               <ul className="mt-1 space-y-1 text-slate-200">
-                {Object.entries(outputs).length === 0 ? (
+                {visibleOutputs.length === 0 ? (
                   <li>No output pins</li>
                 ) : (
-                  Object.entries(outputs).map(([pinId, value]) => (
+                  visibleOutputs.map(([pinId, value]) => (
                     <li key={pinId}>
                       {pinId}: <span className="text-signalHot">{value}</span>
                     </li>
@@ -227,13 +228,15 @@ export function InspectorPanel({
                 <div className="mt-2 rounded border border-panelBorder/70 bg-[#031a30] p-2 text-xs text-slate-300">
                   <div>Tick now: {clockTick}</div>
                   <div>Next toggle tick: {selectedClockInfo?.nextTick ?? '-'}</div>
+                  <div>
+                    Next toggle sim time:{' '}
+                    {selectedClockInfo ? formatSeconds(selectedClockInfo.nextTimeSeconds) : '-'}
+                  </div>
                   <div>Ticks until toggle: {selectedClockInfo?.ticksUntilToggle ?? '-'}</div>
                   <div>Next state: {selectedClockInfo?.nextState ?? '-'}</div>
                   <div>
-                    ETA:{' '}
-                    {clockRunning && selectedClockInfo?.secondsToToggle != null
-                      ? `${selectedClockInfo.secondsToToggle.toFixed(2)}s at current sim pace`
-                      : 'start Run Simulation for real-time ETA'}
+                    Sim until toggle:{' '}
+                    {selectedClockInfo ? formatSeconds(selectedClockInfo.secondsToToggle) : '-'}
                   </div>
                 </div>
               </div>
@@ -309,45 +312,53 @@ export function InspectorPanel({
               </div>
             ) : null}
 
+            <div className="space-y-2">
+              <div className="text-xs uppercase tracking-[0.15em] text-accentSoft">Node Size</div>
+              <div className="grid grid-cols-2 gap-2">
+                <label className="text-[10px] uppercase tracking-[0.12em] text-slate-300">
+                  Width
+                  <input
+                    type="number"
+                    min={currentNodeBounds?.minWidth ?? 72}
+                    max={currentNodeBounds?.maxWidth ?? 520}
+                    value={Math.round(currentNodeSize.width)}
+                    onChange={(event) => {
+                      const nextWidth = Number(event.target.value);
+                      if (!Number.isFinite(nextWidth)) {
+                        return;
+                      }
+                      onUpdateNodeSize(node.id, nextWidth, currentNodeSize.height);
+                    }}
+                    className="mt-1 w-full rounded border border-panelBorder bg-[#031a30] px-2 py-1 text-xs text-slate-100"
+                  />
+                </label>
+                <label className="text-[10px] uppercase tracking-[0.12em] text-slate-300">
+                  Height
+                  <input
+                    type="number"
+                    min={currentNodeBounds?.minHeight ?? 44}
+                    max={currentNodeBounds?.maxHeight ?? 320}
+                    value={Math.round(currentNodeSize.height)}
+                    onChange={(event) => {
+                      const nextHeight = Number(event.target.value);
+                      if (!Number.isFinite(nextHeight)) {
+                        return;
+                      }
+                      onUpdateNodeSize(node.id, currentNodeSize.width, nextHeight);
+                    }}
+                    className="mt-1 w-full rounded border border-panelBorder bg-[#031a30] px-2 py-1 text-xs text-slate-100"
+                  />
+                </label>
+              </div>
+              <div className="text-[10px] uppercase tracking-[0.12em] text-slate-400">
+                Range: {currentNodeBounds?.minWidth ?? 72}-{currentNodeBounds?.maxWidth ?? 520}px W,{' '}
+                {currentNodeBounds?.minHeight ?? 44}-{currentNodeBounds?.maxHeight ?? 320}px H
+              </div>
+            </div>
+
             {node.nodeType === 'CHIP' ? (
               <div className="space-y-2">
                 <div className="text-xs uppercase tracking-[0.15em] text-accentSoft">Chip Instance</div>
-                <div className="grid grid-cols-2 gap-2">
-                  <label className="text-[10px] uppercase tracking-[0.12em] text-slate-300">
-                    Width
-                    <input
-                      type="number"
-                      min={120}
-                      max={480}
-                      value={Math.round(chipWidth)}
-                      onChange={(event) => {
-                        const nextWidth = Number(event.target.value);
-                        if (!Number.isFinite(nextWidth)) {
-                          return;
-                        }
-                        onUpdateChipInstanceSize(node.id, nextWidth, chipHeight);
-                      }}
-                      className="mt-1 w-full rounded border border-panelBorder bg-[#031a30] px-2 py-1 text-xs text-slate-100"
-                    />
-                  </label>
-                  <label className="text-[10px] uppercase tracking-[0.12em] text-slate-300">
-                    Height
-                    <input
-                      type="number"
-                      min={84}
-                      max={280}
-                      value={Math.round(chipHeight)}
-                      onChange={(event) => {
-                        const nextHeight = Number(event.target.value);
-                        if (!Number.isFinite(nextHeight)) {
-                          return;
-                        }
-                        onUpdateChipInstanceSize(node.id, chipWidth, nextHeight);
-                      }}
-                      className="mt-1 w-full rounded border border-panelBorder bg-[#031a30] px-2 py-1 text-xs text-slate-100"
-                    />
-                  </label>
-                </div>
                 {node.chipRefId ? (
                   <button
                     type="button"

@@ -2,6 +2,8 @@ import type { SimulationDiagnostic } from '@vfcs/sim-core';
 
 interface StatusPanelProps {
   tick: number;
+  timeSeconds: number;
+  simulationStepSeconds: number;
   running: boolean;
   ledSignal: string;
   clockInfo: Array<{
@@ -9,9 +11,10 @@ interface StatusPanelProps {
     label: string;
     frequencyHz: number;
     nextTick: number;
+    nextTimeSeconds: number;
     nextState: string;
     ticksUntilToggle: number;
-    secondsToToggle: number | null;
+    secondsToToggle: number;
   }>;
   statusMessage: string;
   exportPreview: string;
@@ -20,6 +23,8 @@ interface StatusPanelProps {
 
 export function StatusPanel({
   tick,
+  timeSeconds,
+  simulationStepSeconds,
   running,
   ledSignal,
   clockInfo,
@@ -28,6 +33,8 @@ export function StatusPanel({
   diagnostics,
 }: StatusPanelProps) {
   const primaryClock = clockInfo[0] ?? null;
+  const formatSeconds = (value: number): string =>
+    value >= 0.01 ? `${value.toFixed(3)}s` : `${value.toExponential(3)}s`;
 
   return (
     <section className="rounded-xl border border-panelBorder bg-panel/80 p-4 shadow-panelGlow backdrop-blur-sm">
@@ -36,10 +43,12 @@ export function StatusPanel({
         <div className="rounded-lg border border-panelBorder/70 bg-[#031a30] p-3 text-sm">
           <div className="text-xs uppercase tracking-[0.15em] text-accentSoft">Tick</div>
           <div className="text-lg font-semibold">{tick}</div>
+          <div className="text-[10px] text-slate-400">t={formatSeconds(timeSeconds)}</div>
         </div>
         <div className="rounded-lg border border-panelBorder/70 bg-[#031a30] p-3 text-sm">
           <div className="text-xs uppercase tracking-[0.15em] text-accentSoft">Run State</div>
           <div className="text-lg font-semibold">{running ? 'Running' : 'Paused'}</div>
+          <div className="text-[10px] text-slate-400">dt={formatSeconds(simulationStepSeconds)}</div>
         </div>
         <div className="rounded-lg border border-panelBorder/70 bg-[#031a30] p-3 text-sm">
           <div className="text-xs uppercase tracking-[0.15em] text-accentSoft">LED Output</div>
@@ -56,9 +65,7 @@ export function StatusPanel({
                 in {primaryClock.ticksUntilToggle} tick(s) {'->'} {primaryClock.nextState}
               </div>
               <div>
-                {running && primaryClock.secondsToToggle != null
-                  ? `~${primaryClock.secondsToToggle.toFixed(2)}s`
-                  : 'Run sim for ETA'}
+                sim +{formatSeconds(primaryClock.secondsToToggle)} at t={formatSeconds(primaryClock.nextTimeSeconds)}
               </div>
             </div>
           ) : (

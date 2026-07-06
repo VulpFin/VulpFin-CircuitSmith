@@ -4,8 +4,11 @@ import {
   nodeSymbol,
   resolveChipAppearance,
   resolveChipPinLayout,
+  resolveChipVisualElements,
   resolveNodePins,
 } from '../lib/nodePins.js';
+import { clamp, nodeSize } from '../lib/nodeSizing.js';
+import { ChipVisualLayer } from './ChipVisualLayer.js';
 
 interface PendingWireSource {
   nodeId: string;
@@ -42,13 +45,6 @@ interface DragState {
   nodeHeight: number;
 }
 
-const NODE_WIDTH = 164;
-const NODE_HEIGHT = 100;
-const CHIP_MIN_WIDTH = 120;
-const CHIP_MAX_WIDTH = 480;
-const CHIP_MIN_HEIGHT = 84;
-const CHIP_MAX_HEIGHT = 280;
-
 function nodeSignalClass(signal: LogicValue | undefined): string {
   if (signal === '1') {
     return 'signal-on';
@@ -60,27 +56,6 @@ function nodeSignalClass(signal: LogicValue | undefined): string {
     return 'signal-err';
   }
   return 'signal-unknown';
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
-}
-
-function nodeSize(node: NodeInstance): { width: number; height: number } {
-  if (node.nodeType !== 'CHIP') {
-    return {
-      width: NODE_WIDTH,
-      height: NODE_HEIGHT,
-    };
-  }
-
-  const widthRaw = Number(node.parameters?.width ?? 176);
-  const heightRaw = Number(node.parameters?.height ?? 104);
-
-  return {
-    width: Number.isFinite(widthRaw) ? clamp(Math.round(widthRaw), CHIP_MIN_WIDTH, CHIP_MAX_WIDTH) : 176,
-    height: Number.isFinite(heightRaw) ? clamp(Math.round(heightRaw), CHIP_MIN_HEIGHT, CHIP_MAX_HEIGHT) : 104,
-  };
 }
 
 function sourceAnchor(node: NodeInstance): Position {
@@ -272,6 +247,8 @@ export function WorkspaceCanvas({
             const symbol = nodeSymbol(node, chipLibrary);
             const chipAppearance = resolveChipAppearance(node, chipLibrary);
             const chipPinLayout = resolveChipPinLayout(node, chipLibrary);
+            const chipVisualElements = resolveChipVisualElements(node, chipLibrary);
+            const hasCustomFace = node.nodeType === 'CHIP' && chipVisualElements.length > 0;
 
             const customStyle: CSSProperties = chipAppearance
               ? {
@@ -322,7 +299,7 @@ export function WorkspaceCanvas({
                     onAttemptConnectToNode(node.id);
                   }
                 }}
-                className={`${nodeSignalClass(firstSignal)} absolute border p-3 text-left transition hover:border-accent ${
+                className={`${nodeSignalClass(firstSignal)} absolute overflow-hidden border p-2 text-left transition hover:border-accent ${
                   selected ? 'ring-2 ring-accent' : ''
                 } ${isTargetable ? 'border-dashed border-signalHot' : ''}`}
                 style={{
@@ -334,15 +311,29 @@ export function WorkspaceCanvas({
                 }}
                 title={node.nodeType === 'INPUT' ? 'Double-click to toggle value' : undefined}
               >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="text-[11px] uppercase tracking-[0.15em] text-accentSoft">{node.nodeType}</div>
-                  <span className="rounded border border-panelBorder/80 px-1 py-[1px] text-[10px] uppercase tracking-[0.15em] text-accentSoft">
-                    {symbol}
-                  </span>
-                </div>
-                <div className="font-semibold text-slate-100" style={{ color: chipAppearance?.textColor ?? undefined }}>
-                  {node.label ?? node.id}
-                </div>
+                {node.nodeType === 'CHIP' && chipVisualElements.length > 0 ? (
+                  <ChipVisualLayer
+                    elements={chipVisualElements}
+                    pinValues={nodeOutputs[node.id] ?? {}}
+                  />
+                ) : null}
+
+                {!hasCustomFace ? (
+                  <>
+                    <div className="relative z-10 flex items-start justify-between gap-2">
+                      <div className="text-[11px] uppercase tracking-[0.15em] text-accentSoft">{node.nodeType}</div>
+                      <span className="rounded border border-panelBorder/80 px-1 py-[1px] text-[10px] uppercase tracking-[0.15em] text-accentSoft">
+                        {symbol}
+                      </span>
+                    </div>
+                    <div
+                      className="relative z-10 font-semibold text-slate-100"
+                      style={{ color: chipAppearance?.textColor ?? undefined }}
+                    >
+                      {node.label ?? node.id}
+                    </div>
+                  </>
+                ) : null}
 
                 {node.nodeType === 'LED' ? (
                   <div className="mt-2 flex items-center gap-2 text-xs text-slate-300">
@@ -372,11 +363,12 @@ export function WorkspaceCanvas({
                   </div>
                 ) : null}
 
-                {node.nodeType !== 'OUTPUT'
+                {!hasCustomFace
+                && node.nodeType !== 'OUTPUT'
                 && node.nodeType !== 'LED'
                 && node.nodeType !== 'CLOCK'
                 && node.nodeType !== 'BUS_PROBE8' ? (
-                  <div className="mt-1 text-xs text-slate-300">Signal: {firstSignal}</div>
+                  <div className="relative z-10 mt-1 text-xs text-slate-300">Signal: {firstSignal}</div>
                 ) : null}
 
                 {node.nodeType === 'CHIP' && selected ? (

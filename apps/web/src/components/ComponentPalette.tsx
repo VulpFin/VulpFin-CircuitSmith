@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ChipDefinition } from '@vfcs/circuit-model';
 import type { PaletteItem } from '../data/componentPalette.js';
+import { chipMatchesSearch, groupChips } from '../lib/chipGrouping.js';
 import { nodeSymbol } from '../lib/nodePins.js';
 
 interface PaletteMenu {
@@ -23,7 +24,7 @@ const DEFAULT_MENU_LAYOUT: PaletteMenu[] = [
   {
     id: 'primitives',
     name: 'Primitives',
-    itemTypes: ['INPUT', 'VCC', 'GND', 'VSS', 'LED', 'OUTPUT', 'CLOCK', 'NOT', 'AND', 'OR', 'NAND', 'NOR', 'XOR', 'XNOR'],
+    itemTypes: ['INPUT', 'VCC', 'GND', 'VSS', 'LED', 'OUTPUT', 'CLOCK', 'NOT', 'AND', 'OR', 'NAND', 'NOR', 'XOR', 'XNOR', 'TRISTATE_BUFFER'],
   },
   {
     id: 'routing',
@@ -156,8 +157,14 @@ export function ComponentPalette({
   const [customizing, setCustomizing] = useState(false);
   const [newMenuName, setNewMenuName] = useState('');
   const [chipsCollapsed, setChipsCollapsed] = useState(false);
+  const [chipSearch, setChipSearch] = useState('');
+  const [collapsedChipGroups, setCollapsedChipGroups] = useState<string[]>([]);
 
   const itemByType = useMemo(() => new Map(items.map((item) => [item.type, item])), [items]);
+  const visibleChipGroups = useMemo(
+    () => groupChips(chipLibrary.filter((chip) => chipMatchesSearch(chip, chipSearch))),
+    [chipLibrary, chipSearch],
+  );
 
   useEffect(() => {
     setMenus((previous) => normalizeMenus(items, previous));
@@ -247,6 +254,14 @@ export function ComponentPalette({
   const resetMenus = () => {
     setMenus(normalizeMenus(items, DEFAULT_MENU_LAYOUT));
     setNewMenuName('');
+  };
+
+  const toggleChipGroup = (groupId: string) => {
+    setCollapsedChipGroups((previous) =>
+      previous.includes(groupId)
+        ? previous.filter((id) => id !== groupId)
+        : [...previous, groupId],
+    );
   };
 
   return (
@@ -447,37 +462,80 @@ export function ComponentPalette({
             {chipLibrary.length === 0 ? (
               <p className="text-xs text-slate-300">No saved chips yet.</p>
             ) : (
-              chipLibrary.slice(0, 10).map((chip) => {
-                const appearance = (chip.metadata?.appearance as Record<string, unknown> | undefined) ?? undefined;
-                const bodyColor = typeof appearance?.bodyColor === 'string' ? appearance.bodyColor : '#173a53';
-                const symbol = nodeSymbol(
-                  { id: chip.id, nodeType: 'CHIP', chipRefId: chip.id, position: { x: 0, y: 0 } },
-                  chipLibrary,
-                );
+              <>
+                <input
+                  value={chipSearch}
+                  onChange={(event) => setChipSearch(event.target.value)}
+                  placeholder="Search custom chips..."
+                  className="w-full rounded border border-panelBorder bg-[#031a30] px-2 py-1 text-xs text-slate-100 outline-none focus:border-accent"
+                />
 
-                return (
-                  <button
-                    key={chip.id}
-                    type="button"
-                    onClick={() => onAddChipInstance(chip.id)}
-                    className="w-full rounded-lg border border-panelBorder/80 bg-[#04182c] px-3 py-2 text-left text-sm transition hover:border-accent hover:bg-[#06233d]"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="flex min-w-0 items-center gap-2">
-                        <span
-                          className="inline-block h-3 w-3 rounded-sm border border-black/40"
-                          style={{ backgroundColor: bodyColor }}
-                        />
-                        <span className="rounded border border-panelBorder/90 px-1 py-[1px] text-[10px] uppercase tracking-[0.15em] text-accentSoft">
-                          {symbol}
-                        </span>
-                        <span className="truncate">{chip.name}</span>
-                      </span>
-                      <span className="shrink-0 text-[10px] uppercase tracking-[0.15em] text-accentSoft">chip</span>
-                    </div>
-                  </button>
-                );
-              })
+                {visibleChipGroups.length === 0 ? (
+                  <p className="rounded border border-panelBorder/60 bg-[#031a30] px-3 py-2 text-xs text-slate-300">
+                    No custom chips match "{chipSearch}".
+                  </p>
+                ) : (
+                  <div className="max-h-[28rem] space-y-2 overflow-auto pr-1">
+                    {visibleChipGroups.map((group) => {
+                      const collapsed = collapsedChipGroups.includes(group.id);
+                      return (
+                        <section key={group.id} className="rounded border border-panelBorder/70 bg-[#031a30]">
+                          <button
+                            type="button"
+                            onClick={() => toggleChipGroup(group.id)}
+                            className="flex w-full items-center justify-between gap-2 border-b border-panelBorder/50 px-2 py-1.5 text-left"
+                          >
+                            <span className="truncate text-[10px] font-semibold uppercase tracking-[0.14em] text-accentSoft">
+                              {group.name}
+                            </span>
+                            <span className="shrink-0 text-[9px] uppercase tracking-[0.12em] text-slate-400">
+                              {group.chips.length} {collapsed ? '+' : '-'}
+                            </span>
+                          </button>
+
+                          {collapsed ? null : (
+                            <div className="space-y-1.5 p-2">
+                              {group.chips.map((chip) => {
+                                const appearance = (chip.metadata?.appearance as Record<string, unknown> | undefined) ?? undefined;
+                                const bodyColor = typeof appearance?.bodyColor === 'string' ? appearance.bodyColor : '#173a53';
+                                const symbol = nodeSymbol(
+                                  { id: chip.id, nodeType: 'CHIP', chipRefId: chip.id, position: { x: 0, y: 0 } },
+                                  chipLibrary,
+                                );
+
+                                return (
+                                  <button
+                                    key={chip.id}
+                                    type="button"
+                                    onClick={() => onAddChipInstance(chip.id)}
+                                    className="w-full rounded-lg border border-panelBorder/80 bg-[#04182c] px-3 py-2 text-left text-sm transition hover:border-accent hover:bg-[#06233d]"
+                                  >
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span className="flex min-w-0 items-center gap-2">
+                                        <span
+                                          className="inline-block h-3 w-3 rounded-sm border border-black/40"
+                                          style={{ backgroundColor: bodyColor }}
+                                        />
+                                        <span className="rounded border border-panelBorder/90 px-1 py-[1px] text-[10px] uppercase tracking-[0.15em] text-accentSoft">
+                                          {symbol}
+                                        </span>
+                                        <span className="truncate">{chip.name}</span>
+                                      </span>
+                                      <span className="shrink-0 text-[10px] uppercase tracking-[0.15em] text-accentSoft">
+                                        chip
+                                      </span>
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </section>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}

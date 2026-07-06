@@ -1,5 +1,6 @@
 import type { ChipDefinition, NodeInstance, PinDefinition } from '@vfcs/circuit-model';
 import { DEFAULT_NODE_LIBRARY } from '@vfcs/sim-core';
+import { normalizeChipVisualElements, type ChipVisualElement } from './chipVisuals.js';
 
 export interface ResolvedNodePins {
   inputPins: PinDefinition[];
@@ -129,6 +130,7 @@ export function nodeSymbol(node: NodeInstance, chipLibrary: ChipDefinition[]): s
     NOR: 'NOR',
     XOR: 'XOR',
     XNOR: 'XNOR',
+    TRISTATE_BUFFER: 'TRI',
     MUX2: 'MUX2',
     MUX4: 'MUX4',
     DEMUX2: 'DMX',
@@ -188,4 +190,12 @@ export function resolveChipAppearance(
       typeof appearance?.textColor === 'string' ? appearance.textColor : DEFAULT_APPEARANCE.textColor,
     symbol: typeof appearance?.symbol === 'string' ? appearance.symbol : DEFAULT_APPEARANCE.symbol,
   };
+}
+
+export function resolveChipVisualElements(
+  node: NodeInstance,
+  chipLibrary: ChipDefinition[],
+): ChipVisualElement[] {
+  const chip = chipFromNode(node, chipLibrary);
+  return normalizeChipVisualElements(chip?.metadata?.visualElements);
 }

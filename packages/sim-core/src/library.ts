@@ -135,6 +135,16 @@ export const DEFAULT_NODE_LIBRARY: Record<string, NodeDefinition> = {
     ],
     outputPins: [{ id: 'OUT', name: 'Out', direction: 'output' }],
   },
+  TRISTATE_BUFFER: {
+    type: 'TRISTATE_BUFFER',
+    label: 'Tri-State Buffer',
+    category: 'logic',
+    inputPins: [
+      { id: 'DATA', name: 'Data', direction: 'input' },
+      { id: 'EN', name: 'Enable', direction: 'input' },
+    ],
+    outputPins: [{ id: 'OUT', name: 'Out', direction: 'output' }],
+  },
   MUX2: {
     type: 'MUX2',
     label: '2:1 MUX',
@@ -289,6 +299,7 @@ export const DEFAULT_NODE_LIBRARY: Record<string, NodeDefinition> = {
 export const GATE_NODE_TYPES = new Set(['NOT', 'AND', 'OR', 'NAND', 'NOR', 'XOR', 'XNOR']);
 export const COMBINATIONAL_NODE_TYPES = new Set([
   ...GATE_NODE_TYPES,
+  'TRISTATE_BUFFER',
   'MUX2',
   'MUX4',
   'DEMUX2',

@@ -6,13 +6,20 @@ type PinValueMap = Record<string, LogicValue>;
 
 interface ChipPinBinding {
   sourceNodeId?: string;
+  sourcePinId?: string;
   direction?: 'input' | 'output' | 'bidirectional';
+}
+
+interface ChipOutputBinding {
+  nodeId: string;
+  pinId?: string;
 }
 
 interface ChipRuntime {
   engine: SimulationEngine;
   inputBindings: Record<string, string>;
-  outputBindings: Record<string, string>;
+  outputBindings: Record<string, ChipOutputBinding>;
+  visualBindings: Record<string, ChipOutputBinding>;
 }
 
 export interface SimulationEngineOptions {
@@ -39,6 +46,7 @@ export interface SimulationDiagnostic {
 
 export interface SimulationSnapshot {
   tick: number;
+  timeSeconds: number;
   running: boolean;
   nodeOutputs: Record<string, PinValueMap>;
   nodeStates: Record<string, Record<string, unknown>>;
@@ -85,6 +93,12 @@ export class SimulationEngine {
 
   private tick = 0;
 
+  private timeSeconds = 0;
+
+  private readonly defaultStepSeconds: number;
+
+  private currentStepSeconds = 0;
+
   private netValues: Record<string, LogicValue> = {};
 
   private diagnostics: SimulationDiagnostic[] = [];
@@ -104,6 +118,7 @@ export class SimulationEngine {
       this.chipById.set(chip.id, chip);
     }
     this.orderedNodes = [...circuit.nodes].sort((a, b) => a.id.localeCompare(b.id));
+    this.defaultStepSeconds = this.resolveDefaultStepSeconds();
     this.initializeInboundMap();
     this.reset();
   }
@@ -132,6 +147,7 @@ export class SimulationEngine {
   public getSnapshot(): SimulationSnapshot {
     return {
       tick: this.tick,
+      timeSeconds: this.timeSeconds,
       running: this.running,
       nodeOutputs: structuredClone(this.outputs),
       nodeStates: structuredClone(this.states) as Record<string, Record<string, unknown>>,
@@ -143,6 +159,8 @@ export class SimulationEngine {
 
   public reset(): SimulationSnapshot {
     this.tick = 0;
+    this.timeSeconds = 0;
+    this.currentStepSeconds = 0;
     this.outputs = {};
     this.states = {};
     this.netValues = {};
@@ -207,12 +225,7 @@ export class SimulationEngine {
           continue;
         }
 
-        const outputPins = chip.publicPins.filter(
-          (pin) => pin.direction === 'output' || pin.direction === 'bidirectional',
-        );
-        this.outputs[node.id] = Object.fromEntries(
-          outputPins.map((pin) => [pin.id, LogicConstants.LOGIC_UNKNOWN]),
-        ) as PinValueMap;
+        this.outputs[node.id] = this.defaultChipOutputMap(chip);
       } else if (definition.outputPins.length > 0) {
         const outputPins = Object.fromEntries(
           definition.outputPins.map((pin) => [pin.id, LogicConstants.LOGIC_UNKNOWN]),
@@ -225,17 +238,38 @@ export class SimulationEngine {
     return this.getSnapshot();
   }
 
-  public step(): SimulationSnapshot {
+  public settle(): SimulationSnapshot {
+    this.currentStepSeconds = 0;
+    this.evaluateNetwork(false);
+    return this.getSnapshot();
+  }
+
+  public step(deltaSeconds = this.defaultStepSeconds): SimulationSnapshot {
+    const stepSeconds = Number.isFinite(deltaSeconds) && deltaSeconds > 0 ? deltaSeconds : this.defaultStepSeconds;
     this.tick += 1;
+    this.timeSeconds += stepSeconds;
+    this.currentStepSeconds = stepSeconds;
+    this.evaluateNetwork(true);
+    return this.getSnapshot();
+  }
+
+  public runSteps(count: number, deltaSeconds = this.defaultStepSeconds): SimulationSnapshot {
+    for (let i = 0; i < count; i += 1) {
+      this.step(deltaSeconds);
+    }
+
+    return this.getSnapshot();
+  }
+
+  private evaluateNetwork(advanceSequential: boolean): void {
     this.diagnostics = [];
     this.diagnosticKeys.clear();
 
     this.evaluateSources();
-    const stabilizedBeforeChip = this.evaluateCombinational();
-    this.evaluateChipInstances();
-    const stabilizedAfterChip = this.evaluateCombinational();
-    this.stabilized = stabilizedBeforeChip && stabilizedAfterChip;
-    this.evaluateSequential();
+    this.stabilized = this.settleCombinationalAndChipNetwork(advanceSequential);
+    if (advanceSequential) {
+      this.evaluateSequential();
+    }
     this.captureOutputNodes();
     this.refreshNetValues();
 
@@ -247,16 +281,23 @@ export class SimulationEngine {
           'Combinational network did not stabilize within the pass limit. This may indicate an oscillation or unresolved feedback loop.',
       });
     }
-
-    return this.getSnapshot();
   }
 
-  public runSteps(count: number): SimulationSnapshot {
-    for (let i = 0; i < count; i += 1) {
-      this.step();
+  private settleCombinationalAndChipNetwork(advanceSequential: boolean): boolean {
+    const maxIterations = Math.max(4, this.orderedNodes.length * 2);
+    let combinationalStable = true;
+
+    for (let pass = 0; pass < maxIterations; pass += 1) {
+      const before = this.cloneOutputMaps(this.outputs);
+      combinationalStable = this.evaluateCombinational() && combinationalStable;
+      this.evaluateChipInstances(advanceSequential && pass === 0);
+
+      if (this.outputMapsEqual(before, this.outputs)) {
+        return combinationalStable;
+      }
     }
 
-    return this.getSnapshot();
+    return false;
   }
 
   private initializeInboundMap(): void {
@@ -279,9 +320,10 @@ export class SimulationEngine {
       if (node.nodeType === 'CLOCK') {
         const legacyPeriod = this.nodeParameterAsNumber(node, 'period', -1);
         const frequencyHz = this.nodeParameterAsNumber(node, 'frequencyHz', 1);
-        const halfCycleTicks =
-          legacyPeriod > 0 ? Math.max(1, Math.round(legacyPeriod)) : this.frequencyToHalfCycleTicks(frequencyHz);
-        const phase = Math.floor(this.tick / halfCycleTicks) % 2;
+        const phase =
+          legacyPeriod > 0
+            ? Math.floor(this.tick / Math.max(1, Math.round(legacyPeriod))) % 2
+            : this.clockPhaseAtTime(frequencyHz, this.timeSeconds);
         const nextValue: LogicValue = phase === 0 ? '0' : '1';
         this.outputs[node.id] = { OUT: nextValue };
       }
@@ -325,6 +367,17 @@ export class SimulationEngine {
       const inputValues = this.readAllNodeInputs(node);
       const gate = node.nodeType as 'NOT' | 'AND' | 'OR' | 'NAND' | 'NOR' | 'XOR' | 'XNOR';
       return { OUT: logicGateOutput(gate, inputValues) };
+    }
+
+    if (node.nodeType === 'TRISTATE_BUFFER') {
+      const en = this.readInput(node.id, 'EN');
+      if (en === '0') {
+        return { OUT: LogicConstants.LOGIC_HIGH_Z };
+      }
+      if (en === '1') {
+        return { OUT: this.readInput(node.id, 'DATA') };
+      }
+      return { OUT: en === 'ERR' ? 'ERR' : 'X' };
     }
 
     if (node.nodeType === 'MUX2') {
@@ -487,7 +540,7 @@ export class SimulationEngine {
     }
   }
 
-  private evaluateChipInstances(): void {
+  private evaluateChipInstances(advanceSequential: boolean): void {
     for (const node of this.orderedNodes) {
       if (node.nodeType !== 'CHIP') {
         continue;
@@ -498,19 +551,24 @@ export class SimulationEngine {
         continue;
       }
 
-      const parentOutputMap = this.outputs[node.id] ?? {};
+      const chip = node.chipRefId ? this.chipById.get(node.chipRefId) : null;
+      const parentOutputMap = chip ? this.defaultChipOutputMap(chip) : {};
 
       for (const [publicPinId, internalNodeId] of Object.entries(runtime.inputBindings)) {
         const inputValue = this.readInput(node.id, publicPinId);
         runtime.engine.setInput(internalNodeId, inputValue);
       }
 
-      const childSnapshot = runtime.engine.step();
+      const childSnapshot = advanceSequential
+        ? runtime.engine.step(this.currentStepSeconds || this.defaultStepSeconds)
+        : runtime.engine.settle();
 
-      for (const [publicPinId, internalNodeId] of Object.entries(runtime.outputBindings)) {
-        const fromOutput = childSnapshot.nodeOutputs[internalNodeId]?.OUT as LogicValue | undefined;
-        const fromState = childSnapshot.nodeStates[internalNodeId]?.value as LogicValue | undefined;
-        parentOutputMap[publicPinId] = fromOutput ?? fromState ?? LogicConstants.LOGIC_UNKNOWN;
+      for (const [publicPinId, binding] of Object.entries(runtime.outputBindings)) {
+        parentOutputMap[publicPinId] = this.readChipOutputBinding(childSnapshot, binding);
+      }
+
+      for (const [visualKey, binding] of Object.entries(runtime.visualBindings)) {
+        parentOutputMap[visualKey] = this.readChipOutputBinding(childSnapshot, binding);
       }
 
       this.outputs[node.id] = parentOutputMap;
@@ -660,7 +718,8 @@ export class SimulationEngine {
 
     const nodeById = new Map(childCircuit.nodes.map((entry) => [entry.id, entry]));
     const inputBindings: Record<string, string> = {};
-    const outputBindings: Record<string, string> = {};
+    const outputBindings: Record<string, ChipOutputBinding> = {};
+    const visualBindings: Record<string, ChipOutputBinding> = {};
 
     for (const publicPin of chip.publicPins) {
       const binding = pinBindings[publicPin.id];
@@ -680,14 +739,34 @@ export class SimulationEngine {
       }
 
       if (publicPin.direction === 'output' || publicPin.direction === 'bidirectional') {
-        if (
-          internalNode.nodeType === 'OUTPUT'
-          || internalNode.nodeType === 'LED'
-          || internalNode.nodeType === 'INPUT'
-          || internalNode.nodeType === 'CLOCK'
-        ) {
-          outputBindings[publicPin.id] = internalNode.id;
+        const outputBinding = this.resolveOutputBinding(internalNode, binding.sourcePinId);
+        if (outputBinding) {
+          outputBindings[publicPin.id] = outputBinding;
         }
+      }
+    }
+
+    const visualElements = Array.isArray(chip.metadata?.visualElements)
+      ? chip.metadata.visualElements
+      : [];
+    for (const candidate of visualElements) {
+      if (typeof candidate !== 'object' || candidate === null) {
+        continue;
+      }
+      const visual = candidate as Record<string, unknown>;
+      const visualId = typeof visual.id === 'string' ? visual.id : null;
+      const sourceNodeId = typeof visual.sourceNodeId === 'string' ? visual.sourceNodeId : null;
+      const sourcePinId = typeof visual.sourcePinId === 'string' ? visual.sourcePinId : undefined;
+      if (!visualId || !sourceNodeId) {
+        continue;
+      }
+      const internalNode = nodeById.get(sourceNodeId);
+      if (!internalNode) {
+        continue;
+      }
+      const outputBinding = this.resolveOutputBinding(internalNode, sourcePinId);
+      if (outputBinding) {
+        visualBindings[`__visual_${visualId}`] = outputBinding;
       }
     }
 
@@ -695,6 +774,7 @@ export class SimulationEngine {
       engine: childEngine,
       inputBindings,
       outputBindings,
+      visualBindings,
     };
     this.chipRuntimeByNodeId.set(node.id, runtime);
 
@@ -705,6 +785,11 @@ export class SimulationEngine {
     const fromNode = this.asPinBindingRecord(node.parameters?.pinBindings);
     const fromChip = this.asPinBindingRecord(chip.metadata?.pinBindings);
     const merged: Record<string, ChipPinBinding> = { ...fromChip, ...fromNode };
+    const hasExplicitBindings = Object.keys(fromChip).length > 0 || Object.keys(fromNode).length > 0;
+
+    if (hasExplicitBindings) {
+      return merged;
+    }
 
     const nodeById = new Map(chip.internalCircuit.nodes.map((entry) => [entry.id, entry]));
     const unboundInputNodes = chip.internalCircuit.nodes
@@ -759,6 +844,13 @@ export class SimulationEngine {
     return merged;
   }
 
+  private defaultChipOutputMap(chip: ChipDefinition): PinValueMap {
+    const outputPins = chip.publicPins.filter(
+      (pin) => pin.direction === 'output' || pin.direction === 'bidirectional',
+    );
+    return Object.fromEntries(outputPins.map((pin) => [pin.id, LogicConstants.LOGIC_HIGH_Z])) as PinValueMap;
+  }
+
   private asPinBindingRecord(value: unknown): Record<string, ChipPinBinding> {
     if (typeof value !== 'object' || value === null) {
       return {};
@@ -777,6 +869,10 @@ export class SimulationEngine {
         typeof maybeBinding.sourceNodeId === 'string' && maybeBinding.sourceNodeId.length > 0
           ? maybeBinding.sourceNodeId
           : undefined;
+      const sourcePinId =
+        typeof maybeBinding.sourcePinId === 'string' && maybeBinding.sourcePinId.length > 0
+          ? maybeBinding.sourcePinId
+          : undefined;
       const direction =
         maybeBinding.direction === 'input' || maybeBinding.direction === 'output' || maybeBinding.direction === 'bidirectional'
           ? maybeBinding.direction
@@ -784,6 +880,7 @@ export class SimulationEngine {
 
       output[pinId] = {
         sourceNodeId,
+        sourcePinId,
         direction,
       };
     }
@@ -826,6 +923,47 @@ export class SimulationEngine {
     return nextCircuit;
   }
 
+  private resolveOutputBinding(node: NodeInstance, requestedPinId: string | undefined): ChipOutputBinding | null {
+    if (node.nodeType === 'OUTPUT' || node.nodeType === 'LED') {
+      return { nodeId: node.id };
+    }
+
+    if (node.nodeType === 'CHIP' && requestedPinId?.startsWith('__visual_')) {
+      return { nodeId: node.id, pinId: requestedPinId };
+    }
+
+    const outputPins = this.outputPinsForNode(node);
+    if (requestedPinId && outputPins.some((pin) => pin.id === requestedPinId)) {
+      return { nodeId: node.id, pinId: requestedPinId };
+    }
+
+    if (!requestedPinId && outputPins.length === 1) {
+      return { nodeId: node.id, pinId: outputPins[0].id };
+    }
+
+    return null;
+  }
+
+  private readChipOutputBinding(
+    snapshot: SimulationSnapshot,
+    binding: ChipOutputBinding,
+  ): LogicValue {
+    const fromOutput = binding.pinId
+      ? (snapshot.nodeOutputs[binding.nodeId]?.[binding.pinId] as LogicValue | undefined)
+      : (snapshot.nodeOutputs[binding.nodeId]?.OUT as LogicValue | undefined);
+    const fromState = snapshot.nodeStates[binding.nodeId]?.value as LogicValue | undefined;
+    return fromOutput ?? fromState ?? LogicConstants.LOGIC_UNKNOWN;
+  }
+
+  private outputPinsForNode(node: NodeInstance): Array<{ id: string }> {
+    if (node.nodeType === 'CHIP' && node.chipRefId) {
+      const chip = this.chipById.get(node.chipRefId);
+      return chip?.publicPins.filter((pin) => pin.direction === 'output' || pin.direction === 'bidirectional') ?? [];
+    }
+
+    return this.library[node.nodeType]?.outputPins ?? [];
+  }
+
   private pinMapsEqual(a: PinValueMap, b: PinValueMap): boolean {
     const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
     for (const key of keys) {
@@ -834,6 +972,23 @@ export class SimulationEngine {
       }
     }
     return true;
+  }
+
+  private outputMapsEqual(a: Record<string, PinValueMap>, b: Record<string, PinValueMap>): boolean {
+    const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+    for (const key of keys) {
+      if (!this.pinMapsEqual(a[key] ?? {}, b[key] ?? {})) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  private cloneOutputMaps(source: Record<string, PinValueMap>): Record<string, PinValueMap> {
+    return Object.fromEntries(
+      Object.entries(source).map(([nodeId, pinMap]) => [nodeId, { ...pinMap }]),
+    ) as Record<string, PinValueMap>;
   }
 
   private isBinary(value: LogicValue): value is '0' | '1' {
@@ -900,19 +1055,50 @@ export class SimulationEngine {
     return fallback;
   }
 
-  private frequencyToHalfCycleTicks(frequencyHz: number): number {
+  private clockPhaseAtTime(frequencyHz: number, timeSeconds: number): 0 | 1 {
     const minHz = 1;
     const maxHz = 10_000_000_000;
     const clamped = Math.min(maxHz, Math.max(minHz, frequencyHz));
-    const normalized = (Math.log10(clamped) - Math.log10(minHz)) / (Math.log10(maxHz) - Math.log10(minHz));
+    const halfCycleIndex = Math.floor(timeSeconds * clamped * 2 + 1e-9);
+    return halfCycleIndex % 2 === 0 ? 0 : 1;
+  }
 
-    // Use a compressed clock scale for interactive UI simulation: full frequency range stays usable.
-    const slowestHalfCycleTicks = 12;
-    const fastestHalfCycleTicks = 1;
-    const mapped =
-      slowestHalfCycleTicks - normalized * (slowestHalfCycleTicks - fastestHalfCycleTicks);
+  private resolveDefaultStepSeconds(): number {
+    const fastestClockHz = this.findFastestClockHz(this.circuit, new Set<string>());
+    if (!fastestClockHz) {
+      return 1 / 60;
+    }
 
-    return Math.max(fastestHalfCycleTicks, Math.round(mapped));
+    return 1 / (fastestClockHz * 2);
+  }
+
+  private findFastestClockHz(circuit: CircuitDefinition, visitedChipIds: Set<string>): number | null {
+    let fastest: number | null = null;
+
+    for (const node of circuit.nodes) {
+      if (node.nodeType === 'CLOCK') {
+        const frequencyHz = this.nodeParameterAsNumber(node, 'frequencyHz', 1);
+        if (Number.isFinite(frequencyHz) && frequencyHz > 0) {
+          fastest = Math.max(fastest ?? 0, Math.min(10_000_000_000, Math.max(1, frequencyHz)));
+        }
+      }
+
+      if (node.nodeType === 'CHIP' && node.chipRefId && !visitedChipIds.has(node.chipRefId)) {
+        const chip = this.chipById.get(node.chipRefId);
+        if (!chip) {
+          continue;
+        }
+
+        const nextVisited = new Set(visitedChipIds);
+        nextVisited.add(node.chipRefId);
+        const nestedFastest = this.findFastestClockHz(chip.internalCircuit, nextVisited);
+        if (nestedFastest) {
+          fastest = Math.max(fastest ?? 0, nestedFastest);
+        }
+      }
+    }
+
+    return fastest;
   }
 
   private requireNode(nodeId: string): NodeInstance {
