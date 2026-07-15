@@ -1,0 +1,1849 @@
+{
+  "id": "4_comparator_lsb",
+  "name": "4 Comparator LSB Pins",
+  "version": "0.1.0",
+  "publicPins": [
+    {
+      "id": "A0",
+      "name": "A0",
+      "direction": "input"
+    },
+    {
+      "id": "A1",
+      "name": "A1",
+      "direction": "input"
+    },
+    {
+      "id": "A2",
+      "name": "A2",
+      "direction": "input"
+    },
+    {
+      "id": "A3",
+      "name": "A3",
+      "direction": "input"
+    },
+    {
+      "id": "B0",
+      "name": "B0",
+      "direction": "input"
+    },
+    {
+      "id": "B1",
+      "name": "B1",
+      "direction": "input"
+    },
+    {
+      "id": "B2",
+      "name": "B2",
+      "direction": "input"
+    },
+    {
+      "id": "B3",
+      "name": "B3",
+      "direction": "input"
+    },
+    {
+      "id": "A_GT_B",
+      "name": "A>B",
+      "direction": "output"
+    },
+    {
+      "id": "A_EQ_B",
+      "name": "A=B",
+      "direction": "output"
+    },
+    {
+      "id": "A_LT_B",
+      "name": "A<B",
+      "direction": "output"
+    }
+  ],
+  "internalCircuit": {
+    "id": "blank_workspace",
+    "name": "Blank Workspace",
+    "description": "An empty CircuitSmith workspace.",
+    "nodes": [
+      {
+        "id": "input_1",
+        "nodeType": "INPUT",
+        "label": "A3",
+        "position": {
+          "x": 0,
+          "y": 0
+        },
+        "state": {
+          "value": "0"
+        }
+      },
+      {
+        "id": "input_2",
+        "nodeType": "INPUT",
+        "label": "A2",
+        "position": {
+          "x": 0,
+          "y": 77
+        },
+        "state": {
+          "value": "0"
+        }
+      },
+      {
+        "id": "input_3",
+        "nodeType": "INPUT",
+        "label": "A1",
+        "position": {
+          "x": 0,
+          "y": 154
+        },
+        "state": {
+          "value": "0"
+        }
+      },
+      {
+        "id": "input_4",
+        "nodeType": "INPUT",
+        "label": "A0",
+        "position": {
+          "x": 0,
+          "y": 231
+        },
+        "state": {
+          "value": "0"
+        }
+      },
+      {
+        "id": "input_5",
+        "nodeType": "INPUT",
+        "label": "B3",
+        "position": {
+          "x": 0,
+          "y": 308
+        },
+        "state": {
+          "value": "0"
+        }
+      },
+      {
+        "id": "input_6",
+        "nodeType": "INPUT",
+        "label": "B2",
+        "position": {
+          "x": 0,
+          "y": 385
+        },
+        "state": {
+          "value": "0"
+        }
+      },
+      {
+        "id": "input_7",
+        "nodeType": "INPUT",
+        "label": "B1",
+        "position": {
+          "x": 0,
+          "y": 462
+        },
+        "state": {
+          "value": "0"
+        }
+      },
+      {
+        "id": "input_8",
+        "nodeType": "INPUT",
+        "label": "B0",
+        "position": {
+          "x": 0,
+          "y": 539
+        },
+        "state": {
+          "value": "0"
+        }
+      },
+      {
+        "id": "chip_1",
+        "nodeType": "CHIP",
+        "label": "COMPARATOR",
+        "position": {
+          "x": 258,
+          "y": 0
+        },
+        "chipRefId": "comparator",
+        "parameters": {
+          "appearance": {
+            "shape": "rect",
+            "bodyColor": "#173a53",
+            "accentColor": "#3bd5ff",
+            "textColor": "#d8ecff",
+            "symbol": "CHIP"
+          },
+          "pinLayout": {
+            "IN1": {
+              "x": 5,
+              "y": 15
+            },
+            "IN2": {
+              "x": 5,
+              "y": 27
+            },
+            "OUT1": {
+              "x": 95,
+              "y": 15
+            },
+            "OUT2": {
+              "x": 95,
+              "y": 27
+            },
+            "OUT3": {
+              "x": 95,
+              "y": 39
+            }
+          },
+          "pinBindings": {
+            "IN1": {
+              "sourceNodeId": "input_1",
+              "direction": "input"
+            },
+            "IN2": {
+              "sourceNodeId": "input_2",
+              "direction": "input"
+            },
+            "OUT1": {
+              "sourceNodeId": "output_1",
+              "direction": "output"
+            },
+            "OUT2": {
+              "sourceNodeId": "output_2",
+              "direction": "output"
+            },
+            "OUT3": {
+              "sourceNodeId": "output_3",
+              "direction": "output"
+            }
+          },
+          "width": 136,
+          "height": 155
+        }
+      },
+      {
+        "id": "chip_2",
+        "nodeType": "CHIP",
+        "label": "COMPARATOR",
+        "position": {
+          "x": 258,
+          "y": 154
+        },
+        "chipRefId": "comparator",
+        "parameters": {
+          "appearance": {
+            "shape": "rect",
+            "bodyColor": "#173a53",
+            "accentColor": "#3bd5ff",
+            "textColor": "#d8ecff",
+            "symbol": "CHIP"
+          },
+          "pinLayout": {
+            "IN1": {
+              "x": 5,
+              "y": 15
+            },
+            "IN2": {
+              "x": 5,
+              "y": 27
+            },
+            "OUT1": {
+              "x": 95,
+              "y": 15
+            },
+            "OUT2": {
+              "x": 95,
+              "y": 27
+            },
+            "OUT3": {
+              "x": 95,
+              "y": 39
+            }
+          },
+          "pinBindings": {
+            "IN1": {
+              "sourceNodeId": "input_1",
+              "direction": "input"
+            },
+            "IN2": {
+              "sourceNodeId": "input_2",
+              "direction": "input"
+            },
+            "OUT1": {
+              "sourceNodeId": "output_1",
+              "direction": "output"
+            },
+            "OUT2": {
+              "sourceNodeId": "output_2",
+              "direction": "output"
+            },
+            "OUT3": {
+              "sourceNodeId": "output_3",
+              "direction": "output"
+            }
+          },
+          "width": 136,
+          "height": 155
+        }
+      },
+      {
+        "id": "chip_3",
+        "nodeType": "CHIP",
+        "label": "COMPARATOR",
+        "position": {
+          "x": 258,
+          "y": 308
+        },
+        "chipRefId": "comparator",
+        "parameters": {
+          "appearance": {
+            "shape": "rect",
+            "bodyColor": "#173a53",
+            "accentColor": "#3bd5ff",
+            "textColor": "#d8ecff",
+            "symbol": "CHIP"
+          },
+          "pinLayout": {
+            "IN1": {
+              "x": 5,
+              "y": 15
+            },
+            "IN2": {
+              "x": 5,
+              "y": 27
+            },
+            "OUT1": {
+              "x": 95,
+              "y": 15
+            },
+            "OUT2": {
+              "x": 95,
+              "y": 27
+            },
+            "OUT3": {
+              "x": 95,
+              "y": 39
+            }
+          },
+          "pinBindings": {
+            "IN1": {
+              "sourceNodeId": "input_1",
+              "direction": "input"
+            },
+            "IN2": {
+              "sourceNodeId": "input_2",
+              "direction": "input"
+            },
+            "OUT1": {
+              "sourceNodeId": "output_1",
+              "direction": "output"
+            },
+            "OUT2": {
+              "sourceNodeId": "output_2",
+              "direction": "output"
+            },
+            "OUT3": {
+              "sourceNodeId": "output_3",
+              "direction": "output"
+            }
+          },
+          "width": 136,
+          "height": 155
+        }
+      },
+      {
+        "id": "chip_4",
+        "nodeType": "CHIP",
+        "label": "COMPARATOR",
+        "position": {
+          "x": 258,
+          "y": 462
+        },
+        "chipRefId": "comparator",
+        "parameters": {
+          "appearance": {
+            "shape": "rect",
+            "bodyColor": "#173a53",
+            "accentColor": "#3bd5ff",
+            "textColor": "#d8ecff",
+            "symbol": "CHIP"
+          },
+          "pinLayout": {
+            "IN1": {
+              "x": 5,
+              "y": 15
+            },
+            "IN2": {
+              "x": 5,
+              "y": 27
+            },
+            "OUT1": {
+              "x": 95,
+              "y": 15
+            },
+            "OUT2": {
+              "x": 95,
+              "y": 27
+            },
+            "OUT3": {
+              "x": 95,
+              "y": 39
+            }
+          },
+          "pinBindings": {
+            "IN1": {
+              "sourceNodeId": "input_1",
+              "direction": "input"
+            },
+            "IN2": {
+              "sourceNodeId": "input_2",
+              "direction": "input"
+            },
+            "OUT1": {
+              "sourceNodeId": "output_1",
+              "direction": "output"
+            },
+            "OUT2": {
+              "sourceNodeId": "output_2",
+              "direction": "output"
+            },
+            "OUT3": {
+              "sourceNodeId": "output_3",
+              "direction": "output"
+            }
+          },
+          "width": 136,
+          "height": 155
+        }
+      },
+      {
+        "id": "and_1",
+        "nodeType": "AND",
+        "label": "AND",
+        "position": {
+          "x": 470,
+          "y": 115
+        }
+      },
+      {
+        "id": "chip_5",
+        "nodeType": "CHIP",
+        "label": "3 AND",
+        "position": {
+          "x": 472,
+          "y": 266
+        },
+        "chipRefId": "3_and",
+        "parameters": {
+          "appearance": {
+            "shape": "rect",
+            "bodyColor": "#173a53",
+            "accentColor": "#3bd5ff",
+            "textColor": "#d8ecff",
+            "symbol": "AND"
+          },
+          "pinLayout": {
+            "IN1": {
+              "x": 5,
+              "y": 15
+            },
+            "IN2": {
+              "x": 5,
+              "y": 27
+            },
+            "IN3": {
+              "x": 5,
+              "y": 39
+            },
+            "OUT1": {
+              "x": 95,
+              "y": 15
+            }
+          },
+          "pinBindings": {
+            "IN1": {
+              "sourceNodeId": "input_1",
+              "direction": "input"
+            },
+            "IN2": {
+              "sourceNodeId": "input_2",
+              "direction": "input"
+            },
+            "IN3": {
+              "sourceNodeId": "input_3",
+              "direction": "input"
+            },
+            "OUT1": {
+              "sourceNodeId": "output_1",
+              "direction": "output"
+            }
+          }
+        }
+      },
+      {
+        "id": "chip_6",
+        "nodeType": "CHIP",
+        "label": "4 AND",
+        "position": {
+          "x": 469,
+          "y": 419
+        },
+        "chipRefId": "4_and",
+        "parameters": {
+          "appearance": {
+            "shape": "rect",
+            "bodyColor": "#173a53",
+            "accentColor": "#3bd5ff",
+            "textColor": "#d8ecff",
+            "symbol": "AND"
+          },
+          "pinLayout": {
+            "IN1": {
+              "x": 5,
+              "y": 15
+            },
+            "IN2": {
+              "x": 5,
+              "y": 27
+            },
+            "IN3": {
+              "x": 5,
+              "y": 39
+            },
+            "OUT1": {
+              "x": 95,
+              "y": 15
+            },
+            "IN4": {
+              "x": 5,
+              "y": 51
+            }
+          },
+          "pinBindings": {
+            "IN1": {
+              "sourceNodeId": "input_1",
+              "direction": "input"
+            },
+            "IN2": {
+              "sourceNodeId": "input_2",
+              "direction": "input"
+            },
+            "IN3": {
+              "sourceNodeId": "input_3",
+              "direction": "input"
+            },
+            "OUT1": {
+              "sourceNodeId": "output_1",
+              "direction": "output"
+            },
+            "IN4": {
+              "sourceNodeId": "input_4",
+              "direction": "input"
+            }
+          }
+        }
+      },
+      {
+        "id": "chip_7",
+        "nodeType": "CHIP",
+        "label": "4 OR",
+        "position": {
+          "x": 680,
+          "y": 264
+        },
+        "chipRefId": "4or",
+        "parameters": {
+          "appearance": {
+            "shape": "rect",
+            "bodyColor": "#0b0d0e",
+            "accentColor": "#3bd5ff",
+            "textColor": "#d8ecff",
+            "symbol": "OR"
+          },
+          "pinLayout": {
+            "IN1": {
+              "x": 5,
+              "y": 15
+            },
+            "IN2": {
+              "x": 5,
+              "y": 39.5
+            },
+            "IN3": {
+              "x": 5,
+              "y": 61.6
+            },
+            "IN4": {
+              "x": 5,
+              "y": 82.7
+            },
+            "OUT1": {
+              "x": 95,
+              "y": 50.3
+            }
+          },
+          "pinBindings": {
+            "IN1": {
+              "sourceNodeId": "input_1",
+              "direction": "input"
+            },
+            "IN2": {
+              "sourceNodeId": "input_2",
+              "direction": "input"
+            },
+            "IN3": {
+              "sourceNodeId": "input_3",
+              "direction": "input"
+            },
+            "IN4": {
+              "sourceNodeId": "input_4",
+              "direction": "input"
+            },
+            "OUT1": {
+              "sourceNodeId": "output_1",
+              "direction": "output"
+            }
+          }
+        }
+      },
+      {
+        "id": "xnor_1",
+        "nodeType": "XNOR",
+        "label": "XNOR",
+        "position": {
+          "x": 258,
+          "y": 617
+        }
+      },
+      {
+        "id": "xnor_2",
+        "nodeType": "XNOR",
+        "label": "XNOR",
+        "position": {
+          "x": 258,
+          "y": 694
+        }
+      },
+      {
+        "id": "xnor_3",
+        "nodeType": "XNOR",
+        "label": "XNOR",
+        "position": {
+          "x": 258,
+          "y": 771
+        }
+      },
+      {
+        "id": "xnor_4",
+        "nodeType": "XNOR",
+        "label": "XNOR",
+        "position": {
+          "x": 258,
+          "y": 848
+        }
+      },
+      {
+        "id": "nor_1",
+        "nodeType": "NOR",
+        "label": "NOR",
+        "position": {
+          "x": 710,
+          "y": 648
+        }
+      },
+      {
+        "id": "output_1",
+        "nodeType": "OUTPUT",
+        "label": "A>B",
+        "position": {
+          "x": 979,
+          "y": 99
+        },
+        "state": {
+          "value": "X"
+        }
+      },
+      {
+        "id": "output_2",
+        "nodeType": "OUTPUT",
+        "label": "A=B",
+        "position": {
+          "x": 979,
+          "y": 241
+        },
+        "state": {
+          "value": "X"
+        }
+      },
+      {
+        "id": "output_3",
+        "nodeType": "OUTPUT",
+        "label": "A<B",
+        "position": {
+          "x": 979,
+          "y": 419
+        },
+        "state": {
+          "value": "X"
+        }
+      },
+      {
+        "id": "chip_8",
+        "nodeType": "CHIP",
+        "label": "4 AND",
+        "position": {
+          "x": 480,
+          "y": 731
+        },
+        "chipRefId": "4_and",
+        "parameters": {
+          "appearance": {
+            "shape": "rect",
+            "bodyColor": "#173a53",
+            "accentColor": "#3bd5ff",
+            "textColor": "#d8ecff",
+            "symbol": "AND"
+          },
+          "pinLayout": {
+            "IN1": {
+              "x": 5,
+              "y": 15
+            },
+            "IN2": {
+              "x": 5,
+              "y": 27
+            },
+            "IN3": {
+              "x": 5,
+              "y": 39
+            },
+            "OUT1": {
+              "x": 95,
+              "y": 15
+            },
+            "IN4": {
+              "x": 5,
+              "y": 51
+            }
+          },
+          "pinBindings": {
+            "IN1": {
+              "sourceNodeId": "input_1",
+              "direction": "input"
+            },
+            "IN2": {
+              "sourceNodeId": "input_2",
+              "direction": "input"
+            },
+            "IN3": {
+              "sourceNodeId": "input_3",
+              "direction": "input"
+            },
+            "OUT1": {
+              "sourceNodeId": "output_1",
+              "direction": "output"
+            },
+            "IN4": {
+              "sourceNodeId": "input_4",
+              "direction": "input"
+            }
+          }
+        }
+      }
+    ],
+    "wires": [
+      {
+        "id": "wire_1",
+        "from": {
+          "nodeId": "input_1",
+          "pinId": "OUT"
+        },
+        "to": {
+          "nodeId": "chip_1",
+          "pinId": "A"
+        }
+      },
+      {
+        "id": "wire_2",
+        "from": {
+          "nodeId": "input_2",
+          "pinId": "OUT"
+        },
+        "to": {
+          "nodeId": "chip_2",
+          "pinId": "A"
+        }
+      },
+      {
+        "id": "wire_3",
+        "from": {
+          "nodeId": "input_3",
+          "pinId": "OUT"
+        },
+        "to": {
+          "nodeId": "chip_3",
+          "pinId": "A"
+        }
+      },
+      {
+        "id": "wire_4",
+        "from": {
+          "nodeId": "input_4",
+          "pinId": "OUT"
+        },
+        "to": {
+          "nodeId": "chip_4",
+          "pinId": "A"
+        }
+      },
+      {
+        "id": "wire_5",
+        "from": {
+          "nodeId": "input_5",
+          "pinId": "OUT"
+        },
+        "to": {
+          "nodeId": "chip_1",
+          "pinId": "B"
+        }
+      },
+      {
+        "id": "wire_6",
+        "from": {
+          "nodeId": "input_6",
+          "pinId": "OUT"
+        },
+        "to": {
+          "nodeId": "chip_2",
+          "pinId": "B"
+        }
+      },
+      {
+        "id": "wire_7",
+        "from": {
+          "nodeId": "input_7",
+          "pinId": "OUT"
+        },
+        "to": {
+          "nodeId": "chip_3",
+          "pinId": "B"
+        }
+      },
+      {
+        "id": "wire_8",
+        "from": {
+          "nodeId": "input_8",
+          "pinId": "OUT"
+        },
+        "to": {
+          "nodeId": "chip_4",
+          "pinId": "B"
+        }
+      },
+      {
+        "id": "wire_9",
+        "from": {
+          "nodeId": "input_1",
+          "pinId": "OUT"
+        },
+        "to": {
+          "nodeId": "xnor_1",
+          "pinId": "A"
+        }
+      },
+      {
+        "id": "wire_10",
+        "from": {
+          "nodeId": "input_2",
+          "pinId": "OUT"
+        },
+        "to": {
+          "nodeId": "xnor_2",
+          "pinId": "A"
+        }
+      },
+      {
+        "id": "wire_11",
+        "from": {
+          "nodeId": "input_3",
+          "pinId": "OUT"
+        },
+        "to": {
+          "nodeId": "xnor_3",
+          "pinId": "A"
+        }
+      },
+      {
+        "id": "wire_12",
+        "from": {
+          "nodeId": "input_4",
+          "pinId": "OUT"
+        },
+        "to": {
+          "nodeId": "xnor_4",
+          "pinId": "A"
+        }
+      },
+      {
+        "id": "wire_13",
+        "from": {
+          "nodeId": "input_5",
+          "pinId": "OUT"
+        },
+        "to": {
+          "nodeId": "xnor_1",
+          "pinId": "B"
+        }
+      },
+      {
+        "id": "wire_14",
+        "from": {
+          "nodeId": "input_6",
+          "pinId": "OUT"
+        },
+        "to": {
+          "nodeId": "xnor_2",
+          "pinId": "B"
+        }
+      },
+      {
+        "id": "wire_15",
+        "from": {
+          "nodeId": "input_7",
+          "pinId": "OUT"
+        },
+        "to": {
+          "nodeId": "xnor_3",
+          "pinId": "B"
+        }
+      },
+      {
+        "id": "wire_16",
+        "from": {
+          "nodeId": "input_8",
+          "pinId": "OUT"
+        },
+        "to": {
+          "nodeId": "xnor_4",
+          "pinId": "B"
+        }
+      },
+      {
+        "id": "wire_17",
+        "from": {
+          "nodeId": "chip_1",
+          "pinId": "AGTB"
+        },
+        "to": {
+          "nodeId": "chip_7",
+          "pinId": "IN1"
+        }
+      },
+      {
+        "id": "wire_18",
+        "from": {
+          "nodeId": "and_1",
+          "pinId": "OUT"
+        },
+        "to": {
+          "nodeId": "chip_7",
+          "pinId": "IN2"
+        }
+      },
+      {
+        "id": "wire_19",
+        "from": {
+          "nodeId": "chip_5",
+          "pinId": "OUT1"
+        },
+        "to": {
+          "nodeId": "chip_7",
+          "pinId": "IN3"
+        }
+      },
+      {
+        "id": "wire_20",
+        "from": {
+          "nodeId": "chip_6",
+          "pinId": "OUT1"
+        },
+        "to": {
+          "nodeId": "chip_7",
+          "pinId": "IN4"
+        }
+      },
+      {
+        "id": "wire_21",
+        "from": {
+          "nodeId": "chip_7",
+          "pinId": "OUT1"
+        },
+        "to": {
+          "nodeId": "output_1",
+          "pinId": "IN"
+        }
+      },
+      {
+        "id": "wire_22",
+        "from": {
+          "nodeId": "nor_1",
+          "pinId": "OUT"
+        },
+        "to": {
+          "nodeId": "output_3",
+          "pinId": "IN"
+        }
+      },
+      {
+        "id": "wire_23",
+        "from": {
+          "nodeId": "chip_7",
+          "pinId": "OUT1"
+        },
+        "to": {
+          "nodeId": "nor_1",
+          "pinId": "A"
+        }
+      },
+      {
+        "id": "wire_24",
+        "from": {
+          "nodeId": "xnor_1",
+          "pinId": "OUT"
+        },
+        "to": {
+          "nodeId": "chip_8",
+          "pinId": "IN1"
+        }
+      },
+      {
+        "id": "wire_25",
+        "from": {
+          "nodeId": "xnor_2",
+          "pinId": "OUT"
+        },
+        "to": {
+          "nodeId": "chip_8",
+          "pinId": "IN2"
+        }
+      },
+      {
+        "id": "wire_26",
+        "from": {
+          "nodeId": "xnor_3",
+          "pinId": "OUT"
+        },
+        "to": {
+          "nodeId": "chip_8",
+          "pinId": "IN4"
+        }
+      },
+      {
+        "id": "wire_27",
+        "from": {
+          "nodeId": "xnor_4",
+          "pinId": "OUT"
+        },
+        "to": {
+          "nodeId": "chip_8",
+          "pinId": "IN3"
+        }
+      },
+      {
+        "id": "wire_28",
+        "from": {
+          "nodeId": "chip_8",
+          "pinId": "OUT1"
+        },
+        "to": {
+          "nodeId": "output_2",
+          "pinId": "IN"
+        }
+      },
+      {
+        "id": "wire_29",
+        "from": {
+          "nodeId": "chip_8",
+          "pinId": "OUT1"
+        },
+        "to": {
+          "nodeId": "nor_1",
+          "pinId": "B"
+        }
+      },
+      {
+        "id": "wire_30",
+        "from": {
+          "nodeId": "chip_1",
+          "pinId": "AEQB"
+        },
+        "to": {
+          "nodeId": "and_1",
+          "pinId": "A"
+        }
+      },
+      {
+        "id": "wire_31",
+        "from": {
+          "nodeId": "chip_2",
+          "pinId": "AGTB"
+        },
+        "to": {
+          "nodeId": "and_1",
+          "pinId": "B"
+        }
+      },
+      {
+        "id": "wire_32",
+        "from": {
+          "nodeId": "chip_1",
+          "pinId": "AEQB"
+        },
+        "to": {
+          "nodeId": "chip_5",
+          "pinId": "IN1"
+        }
+      },
+      {
+        "id": "wire_33",
+        "from": {
+          "nodeId": "chip_2",
+          "pinId": "AEQB"
+        },
+        "to": {
+          "nodeId": "chip_5",
+          "pinId": "IN2"
+        }
+      },
+      {
+        "id": "wire_34",
+        "from": {
+          "nodeId": "chip_3",
+          "pinId": "AGTB"
+        },
+        "to": {
+          "nodeId": "chip_5",
+          "pinId": "IN3"
+        }
+      },
+      {
+        "id": "wire_35",
+        "from": {
+          "nodeId": "chip_1",
+          "pinId": "AEQB"
+        },
+        "to": {
+          "nodeId": "chip_6",
+          "pinId": "IN1"
+        }
+      },
+      {
+        "id": "wire_36",
+        "from": {
+          "nodeId": "chip_2",
+          "pinId": "AEQB"
+        },
+        "to": {
+          "nodeId": "chip_6",
+          "pinId": "IN2"
+        }
+      },
+      {
+        "id": "wire_37",
+        "from": {
+          "nodeId": "chip_3",
+          "pinId": "AEQB"
+        },
+        "to": {
+          "nodeId": "chip_6",
+          "pinId": "IN3"
+        }
+      },
+      {
+        "id": "wire_38",
+        "from": {
+          "nodeId": "chip_4",
+          "pinId": "AGTB"
+        },
+        "to": {
+          "nodeId": "chip_6",
+          "pinId": "IN4"
+        }
+      }
+    ],
+    "nets": [
+      {
+        "id": "net_1",
+        "wireIds": [
+          "wire_1",
+          "wire_9"
+        ],
+        "driverPins": [
+          {
+            "nodeId": "input_1",
+            "pinId": "OUT"
+          }
+        ],
+        "loadPins": [
+          {
+            "nodeId": "chip_1",
+            "pinId": "IN2"
+          },
+          {
+            "nodeId": "xnor_1",
+            "pinId": "A"
+          }
+        ]
+      },
+      {
+        "id": "net_2",
+        "wireIds": [
+          "wire_2",
+          "wire_10"
+        ],
+        "driverPins": [
+          {
+            "nodeId": "input_2",
+            "pinId": "OUT"
+          }
+        ],
+        "loadPins": [
+          {
+            "nodeId": "chip_2",
+            "pinId": "IN1"
+          },
+          {
+            "nodeId": "xnor_2",
+            "pinId": "A"
+          }
+        ]
+      },
+      {
+        "id": "net_3",
+        "wireIds": [
+          "wire_3",
+          "wire_11"
+        ],
+        "driverPins": [
+          {
+            "nodeId": "input_3",
+            "pinId": "OUT"
+          }
+        ],
+        "loadPins": [
+          {
+            "nodeId": "chip_3",
+            "pinId": "IN1"
+          },
+          {
+            "nodeId": "xnor_3",
+            "pinId": "A"
+          }
+        ]
+      },
+      {
+        "id": "net_4",
+        "wireIds": [
+          "wire_4",
+          "wire_12"
+        ],
+        "driverPins": [
+          {
+            "nodeId": "input_4",
+            "pinId": "OUT"
+          }
+        ],
+        "loadPins": [
+          {
+            "nodeId": "chip_4",
+            "pinId": "IN1"
+          },
+          {
+            "nodeId": "xnor_4",
+            "pinId": "A"
+          }
+        ]
+      },
+      {
+        "id": "net_5",
+        "wireIds": [
+          "wire_5",
+          "wire_13"
+        ],
+        "driverPins": [
+          {
+            "nodeId": "input_5",
+            "pinId": "OUT"
+          }
+        ],
+        "loadPins": [
+          {
+            "nodeId": "chip_1",
+            "pinId": "B"
+          },
+          {
+            "nodeId": "xnor_1",
+            "pinId": "B"
+          }
+        ]
+      },
+      {
+        "id": "net_6",
+        "wireIds": [
+          "wire_6",
+          "wire_14"
+        ],
+        "driverPins": [
+          {
+            "nodeId": "input_6",
+            "pinId": "OUT"
+          }
+        ],
+        "loadPins": [
+          {
+            "nodeId": "chip_2",
+            "pinId": "B"
+          },
+          {
+            "nodeId": "xnor_2",
+            "pinId": "B"
+          }
+        ]
+      },
+      {
+        "id": "net_7",
+        "wireIds": [
+          "wire_7",
+          "wire_15"
+        ],
+        "driverPins": [
+          {
+            "nodeId": "input_7",
+            "pinId": "OUT"
+          }
+        ],
+        "loadPins": [
+          {
+            "nodeId": "chip_3",
+            "pinId": "B"
+          },
+          {
+            "nodeId": "xnor_3",
+            "pinId": "B"
+          }
+        ]
+      },
+      {
+        "id": "net_8",
+        "wireIds": [
+          "wire_8",
+          "wire_16"
+        ],
+        "driverPins": [
+          {
+            "nodeId": "input_8",
+            "pinId": "OUT"
+          }
+        ],
+        "loadPins": [
+          {
+            "nodeId": "chip_4",
+            "pinId": "B"
+          },
+          {
+            "nodeId": "xnor_4",
+            "pinId": "B"
+          }
+        ]
+      },
+      {
+        "id": "net_9",
+        "wireIds": [
+          "wire_17"
+        ],
+        "driverPins": [
+          {
+            "nodeId": "chip_1",
+            "pinId": "AGTB"
+          }
+        ],
+        "loadPins": [
+          {
+            "nodeId": "chip_7",
+            "pinId": "IN1"
+          }
+        ]
+      },
+      {
+        "id": "net_10",
+        "wireIds": [
+          "wire_18"
+        ],
+        "driverPins": [
+          {
+            "nodeId": "and_1",
+            "pinId": "OUT"
+          }
+        ],
+        "loadPins": [
+          {
+            "nodeId": "chip_7",
+            "pinId": "IN2"
+          }
+        ]
+      },
+      {
+        "id": "net_11",
+        "wireIds": [
+          "wire_19"
+        ],
+        "driverPins": [
+          {
+            "nodeId": "chip_5",
+            "pinId": "OUT1"
+          }
+        ],
+        "loadPins": [
+          {
+            "nodeId": "chip_7",
+            "pinId": "IN3"
+          }
+        ]
+      },
+      {
+        "id": "net_12",
+        "wireIds": [
+          "wire_20"
+        ],
+        "driverPins": [
+          {
+            "nodeId": "chip_6",
+            "pinId": "OUT1"
+          }
+        ],
+        "loadPins": [
+          {
+            "nodeId": "chip_7",
+            "pinId": "IN4"
+          }
+        ]
+      },
+      {
+        "id": "net_13",
+        "wireIds": [
+          "wire_21",
+          "wire_23"
+        ],
+        "driverPins": [
+          {
+            "nodeId": "chip_7",
+            "pinId": "OUT1"
+          }
+        ],
+        "loadPins": [
+          {
+            "nodeId": "output_1",
+            "pinId": "IN"
+          },
+          {
+            "nodeId": "nor_1",
+            "pinId": "A"
+          }
+        ]
+      },
+      {
+        "id": "net_14",
+        "wireIds": [
+          "wire_22"
+        ],
+        "driverPins": [
+          {
+            "nodeId": "nor_1",
+            "pinId": "OUT"
+          }
+        ],
+        "loadPins": [
+          {
+            "nodeId": "output_3",
+            "pinId": "IN"
+          }
+        ]
+      },
+      {
+        "id": "net_15",
+        "wireIds": [
+          "wire_24"
+        ],
+        "driverPins": [
+          {
+            "nodeId": "xnor_1",
+            "pinId": "OUT"
+          }
+        ],
+        "loadPins": [
+          {
+            "nodeId": "chip_8",
+            "pinId": "IN1"
+          }
+        ]
+      },
+      {
+        "id": "net_16",
+        "wireIds": [
+          "wire_25"
+        ],
+        "driverPins": [
+          {
+            "nodeId": "xnor_2",
+            "pinId": "OUT"
+          }
+        ],
+        "loadPins": [
+          {
+            "nodeId": "chip_8",
+            "pinId": "IN2"
+          }
+        ]
+      },
+      {
+        "id": "net_17",
+        "wireIds": [
+          "wire_26"
+        ],
+        "driverPins": [
+          {
+            "nodeId": "xnor_3",
+            "pinId": "OUT"
+          }
+        ],
+        "loadPins": [
+          {
+            "nodeId": "chip_8",
+            "pinId": "IN4"
+          }
+        ]
+      },
+      {
+        "id": "net_18",
+        "wireIds": [
+          "wire_27"
+        ],
+        "driverPins": [
+          {
+            "nodeId": "xnor_4",
+            "pinId": "OUT"
+          }
+        ],
+        "loadPins": [
+          {
+            "nodeId": "chip_8",
+            "pinId": "IN3"
+          }
+        ]
+      },
+      {
+        "id": "net_19",
+        "wireIds": [
+          "wire_28",
+          "wire_29"
+        ],
+        "driverPins": [
+          {
+            "nodeId": "chip_8",
+            "pinId": "OUT1"
+          }
+        ],
+        "loadPins": [
+          {
+            "nodeId": "output_2",
+            "pinId": "IN"
+          },
+          {
+            "nodeId": "nor_1",
+            "pinId": "B"
+          }
+        ]
+      },
+      {
+        "id": "net_20",
+        "wireIds": [
+          "wire_30",
+          "wire_32",
+          "wire_35"
+        ],
+        "driverPins": [
+          {
+            "nodeId": "chip_1",
+            "pinId": "AEQB"
+          }
+        ],
+        "loadPins": [
+          {
+            "nodeId": "and_1",
+            "pinId": "A"
+          },
+          {
+            "nodeId": "chip_5",
+            "pinId": "IN1"
+          },
+          {
+            "nodeId": "chip_6",
+            "pinId": "IN1"
+          }
+        ]
+      },
+      {
+        "id": "net_21",
+        "wireIds": [
+          "wire_31"
+        ],
+        "driverPins": [
+          {
+            "nodeId": "chip_2",
+            "pinId": "AGTB"
+          }
+        ],
+        "loadPins": [
+          {
+            "nodeId": "and_1",
+            "pinId": "B"
+          }
+        ]
+      },
+      {
+        "id": "net_22",
+        "wireIds": [
+          "wire_33",
+          "wire_36"
+        ],
+        "driverPins": [
+          {
+            "nodeId": "chip_2",
+            "pinId": "AEQB"
+          }
+        ],
+        "loadPins": [
+          {
+            "nodeId": "chip_5",
+            "pinId": "IN2"
+          },
+          {
+            "nodeId": "chip_6",
+            "pinId": "IN2"
+          }
+        ]
+      },
+      {
+        "id": "net_23",
+        "wireIds": [
+          "wire_34"
+        ],
+        "driverPins": [
+          {
+            "nodeId": "chip_3",
+            "pinId": "AGTB"
+          }
+        ],
+        "loadPins": [
+          {
+            "nodeId": "chip_5",
+            "pinId": "IN3"
+          }
+        ]
+      },
+      {
+        "id": "net_24",
+        "wireIds": [
+          "wire_37"
+        ],
+        "driverPins": [
+          {
+            "nodeId": "chip_3",
+            "pinId": "AEQB"
+          }
+        ],
+        "loadPins": [
+          {
+            "nodeId": "chip_6",
+            "pinId": "IN3"
+          }
+        ]
+      },
+      {
+        "id": "net_25",
+        "wireIds": [
+          "wire_38"
+        ],
+        "driverPins": [
+          {
+            "nodeId": "chip_4",
+            "pinId": "ALTB"
+          }
+        ],
+        "loadPins": [
+          {
+            "nodeId": "chip_6",
+            "pinId": "IN4"
+          }
+        ]
+      }
+    ],
+    "metadata": {
+      "clearedAt": "2026-07-06T06:38:41.286Z"
+    }
+  },
+  "metadata": {
+    "generatedBy": "createChipDefinitionFromCircuit",
+    "generatedAt": "2026-07-06T09:22:50.414Z",
+    "status": "placeholder-architecture",
+    "appearance": {
+      "shape": "rect",
+      "bodyColor": "#173a53",
+      "accentColor": "#3bd5ff",
+      "textColor": "#d8ecff",
+      "symbol": "CMP-L"
+    },
+    "pinLayout": {
+      "A0": {
+        "x": 5,
+        "y": 51
+      },
+      "A1": {
+        "x": 5,
+        "y": 39
+      },
+      "A2": {
+        "x": 5,
+        "y": 27
+      },
+      "A3": {
+        "x": 5,
+        "y": 15
+      },
+      "B0": {
+        "x": 5,
+        "y": 95
+      },
+      "B1": {
+        "x": 5,
+        "y": 87
+      },
+      "B2": {
+        "x": 5,
+        "y": 75
+      },
+      "B3": {
+        "x": 5,
+        "y": 63
+      },
+      "A_GT_B": {
+        "x": 95,
+        "y": 15
+      },
+      "A_EQ_B": {
+        "x": 95,
+        "y": 27
+      },
+      "A_LT_B": {
+        "x": 95,
+        "y": 39
+      }
+    },
+    "pinBindings": {
+      "A0": {
+        "sourceNodeId": "input_4",
+        "direction": "input"
+      },
+      "A1": {
+        "sourceNodeId": "input_3",
+        "direction": "input"
+      },
+      "A2": {
+        "sourceNodeId": "input_2",
+        "direction": "input"
+      },
+      "A3": {
+        "sourceNodeId": "input_1",
+        "direction": "input"
+      },
+      "B0": {
+        "sourceNodeId": "input_8",
+        "direction": "input"
+      },
+      "B1": {
+        "sourceNodeId": "input_7",
+        "direction": "input"
+      },
+      "B2": {
+        "sourceNodeId": "input_6",
+        "direction": "input"
+      },
+      "B3": {
+        "sourceNodeId": "input_5",
+        "direction": "input"
+      },
+      "A_GT_B": {
+        "sourceNodeId": "output_1",
+        "direction": "output"
+      },
+      "A_EQ_B": {
+        "sourceNodeId": "output_2",
+        "direction": "output"
+      },
+      "A_LT_B": {
+        "sourceNodeId": "output_3",
+        "direction": "output"
+      }
+    },
+    "visualElements": [
+      {
+        "id": "auto_led_out1_jjj23",
+        "type": "led",
+        "x": 50,
+        "y": 50,
+        "width": 9,
+        "height": 9,
+        "rotation": 0,
+        "color": "#ff9f43",
+        "offColor": "#22180d",
+        "autoKey": "public:led:A_GT_B",
+        "bindingPinId": "A_GT_B",
+        "sourceNodeId": "chip_7",
+        "sourcePinId": "OUT1"
+      },
+      {
+        "id": "auto_led_out2_ib5ie",
+        "type": "led",
+        "x": 75,
+        "y": 50,
+        "width": 9,
+        "height": 9,
+        "rotation": 0,
+        "color": "#ff9f43",
+        "offColor": "#22180d",
+        "autoKey": "public:led:A_EQ_B",
+        "bindingPinId": "A_EQ_B",
+        "sourceNodeId": "output_2"
+      },
+      {
+        "id": "auto_led_out3_qecxm",
+        "type": "led",
+        "x": 25,
+        "y": 72,
+        "width": 9,
+        "height": 9,
+        "rotation": 0,
+        "color": "#ff9f43",
+        "offColor": "#22180d",
+        "autoKey": "public:led:A_LT_B",
+        "bindingPinId": "A_LT_B",
+        "sourceNodeId": "output_3"
+      }
+    ],
+    "suppressedAutoVisualKeys": []
+  }
+}

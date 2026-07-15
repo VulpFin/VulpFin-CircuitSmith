@@ -487,6 +487,76 @@ describe('SimulationEngine', () => {
     expect(snapshot.nodeOutputs.wrapper.OUT).toBe('0');
   });
 
+  it('supports deeper custom chip nesting for larger composed circuits', () => {
+    const makeBufferChip = (level: number, childId?: string) => {
+      const internalCircuit: CircuitDefinition = childId
+        ? {
+            id: `nested_buffer_${level}_internal`,
+            name: `Nested Buffer ${level} Internal`,
+            nodes: [
+              { id: 'in0', nodeType: 'INPUT', position: { x: 0, y: 0 } },
+              { id: 'child', nodeType: 'CHIP', chipRefId: childId, position: { x: 120, y: 0 } },
+              { id: 'out0', nodeType: 'OUTPUT', position: { x: 260, y: 0 } },
+            ],
+            wires: [
+              { id: 'w_in', from: { nodeId: 'in0', pinId: 'OUT' }, to: { nodeId: 'child', pinId: 'IN' } },
+              { id: 'w_out', from: { nodeId: 'child', pinId: 'OUT' }, to: { nodeId: 'out0', pinId: 'IN' } },
+            ],
+            nets: [],
+          }
+        : {
+            id: 'nested_buffer_0_internal',
+            name: 'Nested Buffer 0 Internal',
+            nodes: [
+              { id: 'in0', nodeType: 'INPUT', position: { x: 0, y: 0 } },
+              { id: 'out0', nodeType: 'OUTPUT', position: { x: 140, y: 0 } },
+            ],
+            wires: [{ id: 'w_signal', from: { nodeId: 'in0', pinId: 'OUT' }, to: { nodeId: 'out0', pinId: 'IN' } }],
+            nets: [],
+          };
+
+      return {
+        id: `nested_buffer_${level}`,
+        name: `Nested Buffer ${level}`,
+        version: '0.1.0',
+        publicPins: [
+          { id: 'IN', name: 'IN', direction: 'input' as const },
+          { id: 'OUT', name: 'OUT', direction: 'output' as const },
+        ],
+        internalCircuit,
+        metadata: {
+          pinBindings: {
+            IN: { sourceNodeId: 'in0', direction: 'input' },
+            OUT: { sourceNodeId: 'out0', direction: 'output' },
+          },
+        },
+      };
+    };
+    const chipLibrary = Array.from({ length: 7 }, (_, level) =>
+      makeBufferChip(level, level > 0 ? `nested_buffer_${level - 1}` : undefined),
+    );
+    const circuit: CircuitDefinition = {
+      id: 'deep_nested_top',
+      name: 'Deep Nested Top',
+      nodes: [
+        { id: 'src', nodeType: 'INPUT', position: { x: 0, y: 0 } },
+        { id: 'deep', nodeType: 'CHIP', chipRefId: 'nested_buffer_6', position: { x: 140, y: 0 } },
+        { id: 'sink', nodeType: 'OUTPUT', position: { x: 300, y: 0 } },
+      ],
+      wires: [
+        { id: 'w_in', from: { nodeId: 'src', pinId: 'OUT' }, to: { nodeId: 'deep', pinId: 'IN' } },
+        { id: 'w_out', from: { nodeId: 'deep', pinId: 'OUT' }, to: { nodeId: 'sink', pinId: 'IN' } },
+      ],
+      nets: [],
+    };
+
+    const engine = new SimulationEngine(circuit, { chipLibrary });
+    engine.setInput('src', '1');
+    const snapshot = engine.settle();
+
+    expect(outputValue(snapshot, 'sink')).toBe('1');
+  });
+
   it('supports custom CHIP outputs bound directly to internal output pins', () => {
     const chipInternal: CircuitDefinition = {
       id: 'chip_full_adder_internal',

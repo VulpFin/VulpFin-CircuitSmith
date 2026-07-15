@@ -113,7 +113,7 @@ export class SimulationEngine {
   ) {
     this.chipLibrary = options.chipLibrary ?? [];
     this.chipDepth = options.chipDepth ?? 0;
-    this.maxChipDepth = options.maxChipDepth ?? 4;
+    this.maxChipDepth = options.maxChipDepth ?? 16;
     for (const chip of this.chipLibrary) {
       this.chipById.set(chip.id, chip);
     }
